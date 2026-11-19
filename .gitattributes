@@ -1,0 +1,2 @@
+# Keep the data file byte-identical between Windows checkouts and GitHub.
+deviceInformation.json text eol=lf

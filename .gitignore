@@ -1,0 +1,18 @@
+node_modules/
+dist/
+dist-server/
+coverage/
+*.log
+
+# Secrets — never commit these
+.env
+.env.*
+!.env.example
+# Public, non-secret build settings for the static (GitHub Pages) site
+!.env.pages
+*.pem
+
+.DS_Store
+Thumbs.db
+dist-pages/
+dist-auth-helper/
