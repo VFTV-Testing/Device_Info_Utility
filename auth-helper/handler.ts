@@ -24,7 +24,8 @@ const TOKEN_URL = "https://github.com/login/oauth/access_token";
 function allowedOrigin(request: Request, env: AuthHelperEnv): string | null {
   const origin = request.headers.get("Origin");
   if (!origin) return null;
-  const allowed = env.ALLOWED_ORIGINS.split(",").map((o) => o.trim().replace(/\/+$/, "")).filter(Boolean);
+  const allowed = (env.ALLOWED_ORIGINS ?? "")
+    .split(",").map((o) => o.trim().replace(/\/+$/, "")).filter(Boolean);
   return allowed.includes(origin) ? origin : null;
 }
 

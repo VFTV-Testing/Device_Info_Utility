@@ -69,6 +69,11 @@ describe("sign-in helper", () => {
     expect(await res.json()).toEqual({ error: "bad_verification_code", error_description: "The code passed is incorrect or expired." });
   });
 
+  it("refuses (instead of crashing) when ALLOWED_ORIGINS is not set", async () => {
+    const res = await handleAuthRequest(post("/token", { code: "abc" }), { ...env, ALLOWED_ORIGINS: undefined as unknown as string });
+    expect(res.status).toBe(403);
+  });
+
   it("reports missing configuration", async () => {
     const res = await handleAuthRequest(post("/token", { code: "abc" }), { ...env, GITHUB_CLIENT_SECRET: "" });
     expect(res.status).toBe(500);
