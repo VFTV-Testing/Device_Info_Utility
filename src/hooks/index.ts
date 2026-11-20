@@ -64,3 +64,42 @@ export function useBeforeUnload(active: boolean): void {
     return () => window.removeEventListener("beforeunload", handler);
   }, [active]);
 }
+
+export const BACKGROUNDS = [
+  { id: "dots", label: "Dot matrix", hint: "Glowing dot grid" },
+  { id: "topo", label: "Topographic", hint: "Map contour lines" },
+  { id: "waves", label: "Waves", hint: "Rolling waves at the bottom" },
+  { id: "rain", label: "Data rain", hint: "Falling hex characters" },
+] as const;
+export type Background = (typeof BACKGROUNDS)[number]["id"];
+const BACKGROUND_KEY = "dim-bg";
+export const DEFAULT_BACKGROUND: Background = "rain";
+
+function readStoredBackground(): Background {
+  try {
+    const value = localStorage.getItem(BACKGROUND_KEY);
+    return BACKGROUNDS.some((b) => b.id === value) ? (value as Background) : DEFAULT_BACKGROUND;
+  } catch {
+    return DEFAULT_BACKGROUND;
+  }
+}
+
+/** Page background style — a per-browser preference, like the theme. */
+export function useBackground(): [Background, (next: Background) => void] {
+  const [background, setBackgroundState] = useState<Background>(readStoredBackground);
+
+  useEffect(() => {
+    document.documentElement.dataset.bg = background;
+  }, [background]);
+
+  const setBackground = useCallback((next: Background) => {
+    setBackgroundState(next);
+    try {
+      localStorage.setItem(BACKGROUND_KEY, next);
+    } catch {
+      /* storage unavailable — applies for this session only */
+    }
+  }, []);
+
+  return [background, setBackground];
+}

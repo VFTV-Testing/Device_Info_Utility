@@ -6,8 +6,9 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "danger-ghos
 type ButtonSize = "sm" | "md" | "icon";
 
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-accent-fg hover:bg-accent-hover shadow-card",
-  secondary: "bg-surface text-fg border border-border hover:bg-surface-2 hover:border-border-strong shadow-card",
+  primary:
+    "bg-primary-gradient text-white font-semibold shadow-[0_6px_20px_var(--primary-glow)] hover:brightness-110 hover:-translate-y-px active:translate-y-0",
+  secondary: "glass text-fg border hover:bg-surface-2 hover:border-border-strong active:scale-[0.98]",
   ghost: "text-fg-muted hover:text-fg hover:bg-surface-2",
   danger: "bg-danger text-white hover:opacity-90 shadow-card",
   "danger-ghost": "text-danger hover:bg-danger-soft",
@@ -15,7 +16,7 @@ const buttonVariants: Record<ButtonVariant, string> = {
 
 const buttonSizes: Record<ButtonSize, string> = {
   sm: "h-8 px-3 text-[13px] gap-1.5",
-  md: "h-9 px-4 text-sm gap-2",
+  md: "h-10 px-4 text-sm gap-2",
   icon: "h-9 w-9 justify-center",
 };
 
@@ -36,7 +37,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium whitespace-nowrap transition-colors",
+        "inline-flex items-center justify-center rounded-xl font-medium whitespace-nowrap transition-[color,background-color,border-color,transform,filter] duration-150",
         "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring",
         "disabled:pointer-events-none disabled:opacity-50",
         buttonVariants[variant],
@@ -58,7 +59,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
         ref={ref}
         aria-invalid={invalid || undefined}
         className={cn(
-          "h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-fg shadow-card transition",
+          "h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm text-fg transition",
           "placeholder:text-fg-subtle hover:border-border-strong",
           "focus:border-accent focus:outline-none focus:ring-4 focus:ring-ring",
           "disabled:cursor-not-allowed disabled:opacity-60",
@@ -76,7 +77,7 @@ export function NativeSelect({ className, children, ...props }: SelectHTMLAttrib
     <div className={cn("relative", className)}>
       <select
         className={cn(
-          "h-9 w-full appearance-none rounded-lg border border-border bg-surface pl-3 pr-8 text-sm text-fg shadow-card",
+          "h-9 w-full appearance-none rounded-xl border border-border bg-surface pl-3 pr-8 text-sm text-fg",
           "hover:border-border-strong focus:border-accent focus:outline-none focus:ring-4 focus:ring-ring",
           "disabled:cursor-not-allowed disabled:opacity-60",
         )}
@@ -90,7 +91,7 @@ export function NativeSelect({ className, children, ...props }: SelectHTMLAttrib
 }
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-2xl border border-border bg-surface shadow-card", className)} {...props} />;
+  return <div className={cn("glass rounded-3xl border shadow-card", className)} {...props} />;
 }
 
 export function CardHeader({
@@ -161,7 +162,7 @@ export function FieldError({ id, children }: { id?: string; children?: ReactNode
 export function EmptyState({ icon, title, description, action }: { icon: ReactNode; title: ReactNode; description?: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <div className="mb-4 grid size-12 place-items-center rounded-2xl border border-border bg-surface-2 text-fg-muted">{icon}</div>
+      <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-accent-soft text-accent">{icon}</div>
       <h3 className="text-sm font-semibold text-fg">{title}</h3>
       {description && <p className="mt-1 max-w-md text-[13px] text-fg-muted">{description}</p>}
       {action && <div className="mt-5">{action}</div>}

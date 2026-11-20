@@ -12,12 +12,12 @@ export interface DialogProps {
   description?: ReactNode;
   children?: ReactNode;
   footer?: ReactNode;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl";
   /** Prevent closing by outside click / Escape (e.g. while saving). */
   locked?: boolean;
 }
 
-const sizes = { sm: "max-w-md", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" };
+const sizes = { sm: "max-w-md", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl", "2xl": "max-w-7xl" };
 
 export function Dialog({ open, onOpenChange, title, description, children, footer, size = "md", locked }: DialogProps) {
   return (

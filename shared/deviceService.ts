@@ -33,6 +33,8 @@ export function buildCommitMessage(mutations: Mutation[], actor?: string): strin
     const m = mutations[0]!;
     const verb = m.type === "create" ? "Add" : m.type === "update" ? "Update" : "Delete";
     title = `${verb} device information: ${describeKey(m.key)}`;
+  } else if (mutations.every((m) => m.type === "update")) {
+    title = `Update device information: ${mutations.length} records`;
   } else {
     const added = mutations.filter((m) => m.type === "create").length;
     const updated = mutations.filter((m) => m.type === "update").length;

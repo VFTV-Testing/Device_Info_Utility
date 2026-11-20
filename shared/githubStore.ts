@@ -1,6 +1,8 @@
 import { AppError } from "./errors";
 import type { DeviceFileStore, StoredFile, TokenProvider, WriteOptions, WriteOutcome } from "./storeTypes";
 
+const IN_BROWSER = typeof window !== "undefined" && typeof document !== "undefined";
+
 /** UTF-8 safe base64 helpers that work in both browsers and Node. */
 export function utf8ToBase64(text: string): string {
   const bytes = new TextEncoder().encode(text);
@@ -69,6 +71,9 @@ export class GitHubFileStore implements DeviceFileStore {
     const token = await this.opts.tokens.getToken();
     try {
       return await this.fetchFn(`${this.opts.apiUrl}${pathAndQuery}`, {
+        // In the browser, GitHub responses are cached for up to 60 s. "no-cache" revalidates with the ETag
+        // so auto-sync sees new commits immediately (unchanged files answer 304, which is free on the rate limit).
+        ...(IN_BROWSER && !init.method ? { cache: "no-cache" as RequestCache } : {}),
         ...init,
         headers: {
           Accept: "application/vnd.github+json",

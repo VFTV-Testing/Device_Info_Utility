@@ -110,7 +110,7 @@ export function AddDeviceDialog({ open, onOpenChange, initialDevice, initialPort
           <div className="grid gap-4 sm:grid-cols-[1fr_120px]">
             <div>
               <FieldLabel htmlFor="new-device" hint="e.g. X101-GER">
-                Device
+                Robot
               </FieldLabel>
               <Input
                 id="new-device"
@@ -131,7 +131,7 @@ export function AddDeviceDialog({ open, onOpenChange, initialDevice, initialPort
               <FieldError>{showKeyError("device")}</FieldError>
             </div>
             <div>
-              <FieldLabel htmlFor="new-port">Port</FieldLabel>
+              <FieldLabel htmlFor="new-port">Device port</FieldLabel>
               <Input
                 id="new-port"
                 value={port}

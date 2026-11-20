@@ -1,93 +1,71 @@
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  CircleDot,
-  Cpu,
-  FileJson,
-  GitBranch,
-  HardDrive,
-  LayoutList,
-  Loader2,
-  LogOut,
-  Moon,
-  PencilLine,
-  RefreshCw,
-  Sun,
-  UserRound,
-  WifiOff,
-} from "lucide-react";
+import { Cpu, FileJson, GitBranch, HardDrive, LayoutGrid, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
 import { NavLink, useLocation, useOutlet } from "react-router-dom";
 import { Toaster } from "sonner";
 import { useAuth } from "../../context/AuthContext";
-import { useDeviceData, type SyncLabel } from "../../context/DeviceDataContext";
-import { useBeforeUnload, useTheme } from "../../hooks";
-import { cn, formatTime } from "../../lib/cn";
+import { useDeviceData } from "../../context/DeviceDataContext";
+import { useBackground, useBeforeUnload, useTheme } from "../../hooks";
+import { cn } from "../../lib/cn";
 import { Button } from "../ui/primitives";
+import { AnimatedBackground, isCanvasScene } from "./AnimatedBackground";
+import { AppearanceMenu } from "./AppearanceMenu";
+import { SyncControl } from "./SyncControl";
 
-const statusStyles: Record<SyncLabel, { tone: string; icon: typeof CheckCircle2; spin?: boolean }> = {
-  Connecting: { tone: "text-fg-muted bg-surface-2", icon: Loader2, spin: true },
-  Syncing: { tone: "text-accent bg-accent-soft", icon: Loader2, spin: true },
-  Connected: { tone: "text-success bg-success-soft", icon: CircleDot },
-  "Saved to GitHub": { tone: "text-success bg-success-soft", icon: CheckCircle2 },
-  "Saved locally": { tone: "text-success bg-success-soft", icon: CheckCircle2 },
-  "Unsaved Changes": { tone: "text-warning bg-warning-soft", icon: PencilLine },
-  "Conflict Detected": { tone: "text-danger bg-danger-soft", icon: AlertTriangle },
-  "Connection Failed": { tone: "text-danger bg-danger-soft", icon: WifiOff },
-  "File Missing": { tone: "text-warning bg-warning-soft", icon: AlertTriangle },
-  "Invalid File": { tone: "text-danger bg-danger-soft", icon: AlertTriangle },
-};
-
-function SyncStatusPill() {
-  const { syncLabel } = useDeviceData();
-  const style = statusStyles[syncLabel];
-  const Icon = style.icon;
-  return (
-    <span
-      role="status"
-      aria-live="polite"
-      data-testid="sync-status"
-      className={cn("inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium", style.tone)}
-    >
-      <Icon className={cn("size-3.5", style.spin && "animate-spin")} aria-hidden />
-      {syncLabel}
-    </span>
-  );
+/** True once the page is scrolled, so the header can get a backdrop only when content passes under it. */
+function useScrolled(threshold = 8): boolean {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > threshold);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [threshold]);
+  return scrolled;
 }
 
 const NAV = [
   { to: "/", label: "Device Manager", icon: Cpu, end: true },
-  { to: "/devices", label: "All Devices", icon: LayoutList, end: false },
+  { to: "/devices", label: "All Devices", icon: LayoutGrid, end: false },
   { to: "/json", label: "JSON Preview", icon: FileJson, end: false },
 ];
 
 export function AppShell() {
-  const { config, snapshot, syncing, refresh, hasUnsavedChanges } = useDeviceData();
+  const { config, hasUnsavedChanges } = useDeviceData();
   const [theme, toggleTheme] = useTheme();
+  const [background, setBackground] = useBackground();
   const auth = useAuth();
   const location = useLocation();
   const outlet = useOutlet();
+  const scrolled = useScrolled();
   useBeforeUnload(hasUnsavedChanges);
 
   const SourceIcon = config?.storage === "local" ? HardDrive : GitBranch;
+  const initials = (auth?.session.name ?? config?.user ?? "").slice(0, 2).toUpperCase();
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+      {isCanvasScene(background) && <AnimatedBackground scene={background} theme={theme} />}
+      <header
+        className={cn(
+          "sticky top-0 z-30 px-3 pb-3 pt-3 transition-[background] duration-300 sm:px-6",
+          scrolled && "bg-[linear-gradient(to_bottom,var(--bg)_92%,transparent)]",
+        )}
+      >
+        <div className="glass-strong mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border px-3 py-2.5 shadow-card">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-accent-fg shadow-card">
-              <Cpu className="size-5" aria-hidden />
+            <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-[linear-gradient(135deg,#6366f1,#22d3ee)] text-white shadow-card">
+              <Cpu className="size-[18px]" aria-hidden />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate text-[15px] font-semibold leading-tight text-fg">Device Information Manager</h1>
+              <h1 className="truncate font-display text-[15px] font-bold leading-tight text-fg">Device Manager</h1>
               {config ? (
                 <a
                   href={config.repoUrl}
                   target="_blank"
                   rel="noreferrer"
                   className={cn(
-                    "flex max-w-[60vw] items-center gap-1 truncate text-xs text-fg-muted sm:max-w-md",
+                    "flex max-w-[52vw] items-center gap-1 truncate text-[11px] text-fg-muted sm:max-w-xs",
                     config.repoUrl ? "hover:text-accent" : "pointer-events-none",
                   )}
                   title={config.location}
@@ -96,39 +74,64 @@ export function AppShell() {
                   <span className="truncate">{config.location}</span>
                 </a>
               ) : (
-                <p className="text-xs text-fg-subtle">Connecting to data source…</p>
+                <p className="text-[11px] text-fg-subtle">Connecting to data source…</p>
               )}
             </div>
           </div>
 
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <SyncStatusPill />
-            <span className="hidden text-xs text-fg-muted md:inline" title={snapshot?.fetchedAt}>
-              Last sync <span className="font-medium text-fg">{formatTime(snapshot?.fetchedAt)}</span>
-            </span>
+          <nav aria-label="Main" className="order-last w-full overflow-x-auto lg:order-none lg:ml-4 lg:w-auto">
+            <ul className="flex w-max gap-1 rounded-full bg-surface-2/70 p-1">
+              {NAV.map(({ to, label, icon: Icon, end }) => (
+                <li key={to}>
+                  <NavLink
+                    to={to}
+                    end={end}
+                    className={({ isActive }) =>
+                      cn(
+                        "relative flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors",
+                        isActive ? "text-fg" : "text-fg-muted hover:text-fg",
+                      )
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && (
+                          <motion.span
+                            layoutId="nav-pill"
+                            className="absolute inset-0 rounded-full bg-accent-soft ring-1 ring-accent/35"
+                            transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                          />
+                        )}
+                        <Icon className="relative size-4" aria-hidden />
+                        <span className="relative">{label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <div className="ml-auto flex items-center gap-1.5">
+            <SyncControl />
             {config?.user && (
-              <span className="hidden items-center gap-1.5 text-xs text-fg-muted lg:inline-flex" title={auth?.session.name ?? config.user}>
+              <span
+                className="ml-1 hidden size-8 place-items-center overflow-hidden rounded-full bg-surface-2 text-[11px] font-semibold text-fg-muted sm:grid"
+                title={auth?.session.name ?? config.user}
+              >
                 {auth?.session.avatarUrl ? (
-                  <img src={auth.session.avatarUrl} alt="" className="size-5 rounded-full" />
+                  <img src={auth.session.avatarUrl} alt={config.user} className="size-8" />
+                ) : initials ? (
+                  initials
                 ) : (
-                  <UserRound className="size-3.5" aria-hidden />
+                  <UserRound className="size-4" aria-hidden />
                 )}
-                {config.user}
               </span>
             )}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void refresh()}
-              disabled={syncing}
-              icon={<RefreshCw className={cn("size-3.5", syncing && "animate-spin")} aria-hidden />}
-              aria-label="Refresh from GitHub"
-            >
-              <span className="hidden sm:inline">Refresh</span>
-            </Button>
             <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
+            <AppearanceMenu theme={theme} onToggleTheme={toggleTheme} background={background} onBackground={setBackground} />
             {auth && (
               <Button
                 variant="ghost"
@@ -144,35 +147,6 @@ export function AppShell() {
             )}
           </div>
         </div>
-
-        <nav aria-label="Main" className="mx-auto max-w-7xl overflow-x-auto px-4 sm:px-6">
-          <ul className="flex gap-1">
-            {NAV.map(({ to, label, icon: Icon, end }) => (
-              <li key={to}>
-                <NavLink
-                  to={to}
-                  end={end}
-                  className={({ isActive }) =>
-                    cn(
-                      "relative flex items-center gap-2 whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors",
-                      isActive ? "text-fg" : "text-fg-muted hover:text-fg",
-                    )
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      <Icon className="size-4" aria-hidden />
-                      {label}
-                      {isActive && (
-                        <motion.span layoutId="nav-underline" className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent" />
-                      )}
-                    </>
-                  )}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
