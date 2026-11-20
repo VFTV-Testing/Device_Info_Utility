@@ -1,3 +1,4 @@
+import { fieldLabel } from "../../lib/fields";
 import { AlertTriangle, CheckCircle2, Copy, Plus } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -149,7 +150,7 @@ export function AddDeviceDialog({ open, onOpenChange, initialDevice, initialPort
             </div>
           </div>
           <div>
-            <FieldLabel htmlFor="new-suffix" hint="hardware, memory, country, service…">
+            <FieldLabel htmlFor="new-suffix" hint="platform, memory, country, stream type…">
               Remaining identifier segments
             </FieldLabel>
             <Input
@@ -211,7 +212,7 @@ export function AddDeviceDialog({ open, onOpenChange, initialDevice, initialPort
               return (
                 <div key={field}>
                   <FieldLabel htmlFor={id} hint={FIELD_META[field].hint}>
-                    <span className="font-mono">{field}</span>
+                    <span className="font-mono">{fieldLabel(field)}</span>
                   </FieldLabel>
                   <Input
                     id={id}

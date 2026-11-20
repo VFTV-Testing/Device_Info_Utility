@@ -103,7 +103,7 @@ describe("Device and Port selection", () => {
     expect(await screen.findByTestId("matched-key")).toHaveTextContent("X101-GER-PORT1-AVSB-FUT_EMMC_Rayson-DE_PROD-DVBC");
     expect(screen.getByLabelText(/sprintNo/)).toHaveValue("67.00+422608.047.00150");
     expect(screen.getByLabelText(/firmwareVersion/)).toHaveValue("422608.047.00150");
-    expect(screen.getByLabelText(/^Hardware/)).toHaveValue("AVSB");
+    expect(screen.getByLabelText(/^Platform/)).toHaveValue("AVSB");
     expect(screen.getByLabelText(/^Country/)).toHaveValue("DE_DVBC");
   });
 
@@ -141,7 +141,7 @@ describe("Device and Port selection", () => {
 
     await userEvent.setup().click(screen.getByRole("radio", { name: "X200-DUP-PORT1-GEN3-B" }));
     expect(await screen.findByTestId("matched-key")).toHaveTextContent("X200-DUP-PORT1-GEN3-B");
-    expect(screen.getByLabelText(/^Hardware/)).toHaveValue("GEN3");
+    expect(screen.getByLabelText(/^Platform/)).toHaveValue("GEN3");
   });
 
   it("opens a record directly from an All Devices edit link", async () => {

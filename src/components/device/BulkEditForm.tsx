@@ -1,3 +1,4 @@
+import { fieldLabel } from "../../lib/fields";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, ArrowRight, Layers, RotateCcw, Save } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -250,7 +251,7 @@ export function BulkEditForm({ keys, onSaved, onCancel, embedded = false }: Bulk
                         .filter((f) => change.base[f] !== change.values[f])
                         .map((f) => (
                           <span key={f} className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 font-mono text-[11px] text-warning">
-                            {f}: {change.base[f] || "—"} <ArrowRight className="size-3" aria-hidden /> {change.values[f]}
+                            {fieldLabel(f)}: {change.base[f] || "—"} <ArrowRight className="size-3" aria-hidden /> {change.values[f]}
                           </span>
                         ))}
                     </span>
@@ -301,7 +302,7 @@ export function BulkEditForm({ keys, onSaved, onCancel, embedded = false }: Bulk
         <ul className="space-y-1 text-[13px]">
           {filled.map((f) => (
             <li key={f} className="flex flex-wrap items-center gap-1.5">
-              <span className="font-mono text-fg-muted">{f}</span>
+              <span className="font-mono text-fg-muted">{fieldLabel(f)}</span>
               <ArrowRight className="size-3 text-fg-subtle" aria-hidden />
               <span className="font-mono font-semibold text-fg">{draft[f]}</span>
             </li>

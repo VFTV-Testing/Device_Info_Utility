@@ -97,9 +97,9 @@ export function MultiSelect({
               "disabled:cursor-not-allowed disabled:opacity-55",
               isChip
                 ? cn(
-                    "h-9 gap-1.5 rounded-full px-3.5",
+                    "h-8 gap-1 rounded-full px-3 text-[13px]",
                     active
-                      ? "border border-accent/40 bg-accent-soft pr-8 font-medium text-accent"
+                      ? "border border-accent/40 bg-accent-soft pr-7 font-medium text-accent"
                       : "border border-dashed border-border-strong text-fg-muted hover:border-accent/50 hover:text-fg",
                   )
                 : cn(

@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Rows3,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   X,
@@ -42,10 +43,14 @@ interface Row extends DeviceRecord {
   key: string;
   device: string;
   port: string;
+  /** Country code from the Country field, e.g. "DE" from "DE_DVBC". */
+  country: string;
+  /** Stream type from the Country field, e.g. "DVBC" from "DE_DVBC". */
+  service: string;
 }
 
 type SortColumn = "device" | "port" | "key" | keyof DeviceRecord;
-type FilterName = "device" | "port" | "Hardware" | "Country" | "sprintNo";
+type FilterName = "device" | "Hardware" | "country" | "service" | "sprintNo" | "appVersion" | "firmwareVersion";
 type Filters = Record<FilterName, string[]>;
 type View = "cards" | "table";
 
@@ -57,18 +62,45 @@ const COLUMNS: { id: SortColumn; label: string; className?: string }[] = [
   { id: "Cver", label: "Cver" },
   { id: "firmwareVersion", label: "firmwareVersion" },
   { id: "appVersion", label: "appVersion" },
-  { id: "Hardware", label: "Hardware" },
+  { id: "Hardware", label: "Platform" },
   { id: "Country", label: "Country" },
 ];
 const PAGE_SIZES = [10, 25, 50, 100];
-const EMPTY_FILTERS: Filters = { device: [], port: [], Hardware: [], Country: [], sprintNo: [] };
 const FILTER_LABELS: Record<FilterName, string> = {
   device: "Robot",
-  port: "Device port",
-  Hardware: "Hardware",
-  Country: "Country",
+  Hardware: "Platform",
+  country: "Country",
+  service: "Stream type",
   sprintNo: "sprintNo",
+  appVersion: "appVersion",
+  firmwareVersion: "firmwareVersion",
 };
+const FILTER_NAMES = Object.keys(FILTER_LABELS) as FilterName[];
+const EMPTY_FILTERS = Object.fromEntries(FILTER_NAMES.map((n) => [n, []])) as unknown as Filters;
+
+/** Friendly names for the country codes used in the Country field (unknown codes show as-is). */
+const COUNTRY_NAMES: Record<string, string> = {
+  AL: "Albania",
+  CZ: "Czechia",
+  DE: "Germany",
+  ES: "Spain",
+  GB: "United Kingdom",
+  GR: "Greece",
+  HU: "Hungary",
+  IE: "Ireland",
+  IT: "Italy",
+  NL: "Netherlands",
+  PT: "Portugal",
+  RO: "Romania",
+  TR: "Türkiye",
+  UK: "United Kingdom",
+};
+
+/** "DE_DVBC" → { country: "DE", service: "DVBC" }; a value without "_" is all country. */
+function splitCountry(value: string): { country: string; service: string } {
+  const i = value.indexOf("_");
+  return i < 0 ? { country: value, service: "—" } : { country: value.slice(0, i), service: value.slice(i + 1) };
+}
 
 /** Moves the card's spotlight glow to the pointer (see .spotlight in index.css). */
 function trackSpotlight(event: MouseEvent<HTMLElement>) {
@@ -141,25 +173,19 @@ export function AllDevicesPage() {
     () =>
       Object.entries(snapshot?.data ?? {}).map(([key, record]) => {
         const id = parseDeviceId(key);
-        return { key, device: id?.device ?? "—", port: id?.port ?? "—", ...record };
+        return { key, device: id?.device ?? "—", port: id?.port ?? "—", ...record, ...splitCountry(record.Country) };
       }),
     [snapshot],
   );
 
   const options = useMemo(
-    () => ({
-      device: uniqueSorted(rows.map((r) => r.device)),
-      port: uniqueSorted(rows.map((r) => r.port)),
-      Hardware: uniqueSorted(rows.map((r) => r.Hardware)),
-      Country: uniqueSorted(rows.map((r) => r.Country)),
-      sprintNo: uniqueSorted(rows.map((r) => r.sprintNo)),
-    }),
+    () => Object.fromEntries(FILTER_NAMES.map((n) => [n, uniqueSorted(rows.map((r) => r[n]))])) as Record<FilterName, string[]>,
     [rows],
   );
   const tones = useMemo(() => hardwareTones(options.Hardware), [options.Hardware]);
   const counts = useMemo(() => {
     const result = {} as Record<FilterName, Map<string, number>>;
-    for (const name of Object.keys(FILTER_LABELS) as FilterName[]) {
+    for (const name of FILTER_NAMES) {
       const map = new Map<string, number>();
       for (const row of rows) map.set(row[name], (map.get(row[name]) ?? 0) + 1);
       result[name] = map;
@@ -255,7 +281,7 @@ export function AllDevicesPage() {
       <div className="space-y-5">
         <h2 className="sr-only">All Devices</h2>
 
-        {/* Bento: summary + hardware mix */}
+        {/* Bento: summary + platform mix */}
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -279,12 +305,19 @@ export function AllDevicesPage() {
                 records across <strong className="text-fg">{options.device.filter((d) => d !== "—").length}</strong> robots
               </p>
               <div className="mt-4 flex flex-wrap gap-1.5">
-                {[
-                  [options.Hardware.length, "hardware types"],
-                  [options.Country.length, "countries"],
-                  [options.sprintNo.length, "sprint builds"],
-                ].map(([n, label]) => (
-                  <span key={label} className="rounded-full bg-surface/60 px-2.5 py-1 text-[11px] text-fg-muted backdrop-blur">
+                {(
+                  [
+                    [options.Hardware.length, "platforms", options.Hardware.join(", ")],
+                    [options.country.length, "countries", options.country.map((c) => COUNTRY_NAMES[c] ?? c).join(", ")],
+                    [options.service.length, "stream types", options.service.join(", ")],
+                    [options.sprintNo.length, "sprint builds", ""],
+                  ] as const
+                ).map(([n, label, detail]) => (
+                  <span
+                    key={label}
+                    title={detail || undefined}
+                    className="rounded-full bg-surface/60 px-2.5 py-1 text-[11px] text-fg-muted backdrop-blur"
+                  >
                     <strong className="font-semibold text-fg">{n}</strong> {label}
                   </span>
                 ))}
@@ -307,10 +340,10 @@ export function AllDevicesPage() {
 
           <Card className="spotlight p-6" onMouseMove={trackSpotlight}>
             <div className="flex items-baseline justify-between">
-              <p className="font-display text-base font-semibold text-fg">Hardware mix</p>
+              <p className="font-display text-base font-semibold text-fg">Platform mix</p>
               <p className="text-xs text-fg-muted">Click to filter</p>
             </div>
-            <div className="mt-4 flex h-3.5 gap-[3px] overflow-hidden rounded-full" role="group" aria-label="Hardware mix">
+            <div className="mt-4 flex h-3.5 gap-[3px] overflow-hidden rounded-full" role="group" aria-label="Platform mix">
               {hardwareMix.map(({ hw, count }) => {
                 const on = filters.Hardware.length === 0 || filters.Hardware.includes(hw);
                 return (
@@ -355,65 +388,77 @@ export function AllDevicesPage() {
         </div>
 
         {/* Aurora filter bar — stays in reach while scrolling on large screens */}
-        <Card className="z-20 flex flex-wrap items-center gap-2 rounded-2xl p-3 lg:sticky lg:top-[90px] lg:glass-strong">
-          <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" aria-hidden />
-            <Input
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search identifiers and values…"
-              aria-label="Search records"
-              className="h-9 rounded-full pl-10"
-            />
-          </div>
-          {(Object.keys(FILTER_LABELS) as FilterName[]).map((name) => (
-            <MultiSelect
-              key={name}
-              variant="chip"
-              label={`Filter by ${FILTER_LABELS[name]}`}
-              placeholder={FILTER_LABELS[name]}
-              values={filters[name]}
-              options={options[name].map((v) => ({ value: v, hint: counts[name].get(v) }))}
-              onChange={(values) => setFilter(name, values)}
-              searchPlaceholder={`Search ${FILTER_LABELS[name].toLowerCase()}…`}
-            />
-          ))}
-          {activeFilters > 0 && (
-            <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 px-2 text-xs font-medium text-accent hover:underline">
-              <X className="size-3" /> Clear all
-            </button>
-          )}
-          <div className="ml-auto flex items-center gap-3">
-            <span className="text-xs text-fg-muted">
-              {filtered.length === rows.length ? `${rows.length} records` : `Showing ${filtered.length} of ${rows.length} records`}
-            </span>
-            <div className="flex rounded-full bg-surface-2 p-1" role="radiogroup" aria-label="View">
-              {(
-                [
-                  ["cards", "Cards", LayoutGrid],
-                  ["table", "Table", Rows3],
-                ] as const
-              ).map(([id, label, Icon]) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="radio"
-                  aria-checked={view === id}
-                  onClick={() => setView(id)}
-                  className={cn(
-                    "relative flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors",
-                    view === id ? "text-white" : "text-fg-muted hover:text-fg",
-                  )}
-                >
-                  {view === id && <motion.span layoutId="view-pill" className="absolute inset-0 rounded-full bg-primary-gradient" />}
-                  <Icon className="relative size-3.5" aria-hidden />
-                  <span className="relative">{label}</span>
-                </button>
-              ))}
+        <Card className="z-20 flex flex-col gap-2.5 rounded-2xl p-3 lg:sticky lg:top-[90px] lg:glass-strong">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[220px] flex-1 sm:max-w-md">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" aria-hidden />
+              <Input
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search identifiers and values…"
+                aria-label="Search records"
+                className="h-9 rounded-full pl-10"
+              />
             </div>
+            {activeFilters > 0 && (
+              <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 px-2 text-xs font-medium text-accent hover:underline">
+                <X className="size-3" /> Clear all
+              </button>
+            )}
+            <div className="ml-auto flex items-center gap-3">
+              <span className="text-xs text-fg-muted">
+                {filtered.length === rows.length ? `${rows.length} records` : `Showing ${filtered.length} of ${rows.length} records`}
+              </span>
+              <div className="flex rounded-full bg-surface-2 p-1" role="radiogroup" aria-label="View">
+                {(
+                  [
+                    ["cards", "Cards", LayoutGrid],
+                    ["table", "Table", Rows3],
+                  ] as const
+                ).map(([id, label, Icon]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={view === id}
+                    onClick={() => setView(id)}
+                    className={cn(
+                      "relative flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors",
+                      view === id ? "text-white" : "text-fg-muted hover:text-fg",
+                    )}
+                  >
+                    {view === id && <motion.span layoutId="view-pill" className="absolute inset-0 rounded-full bg-primary-gradient" />}
+                    <Icon className="relative size-3.5" aria-hidden />
+                    <span className="relative">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-2.5">
+            <span className="mr-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+              <SlidersHorizontal className="size-3.5" aria-hidden /> Filters
+            </span>
+            {FILTER_NAMES.map((name) => (
+              <MultiSelect
+                key={name}
+                variant="chip"
+                label={`Filter by ${FILTER_LABELS[name]}`}
+                placeholder={FILTER_LABELS[name]}
+                values={filters[name]}
+                options={options[name].map((v) => ({
+                  value: v,
+                  label: name === "country" && COUNTRY_NAMES[v] ? `${v} · ${COUNTRY_NAMES[v]}` : undefined,
+                  summary: v,
+                  hint: counts[name].get(v),
+                }))}
+                onChange={(values) => setFilter(name, values)}
+                searchPlaceholder={`Search ${FILTER_LABELS[name].toLowerCase()}…`}
+              />
+            ))}
           </div>
         </Card>
 
@@ -474,7 +519,12 @@ export function AllDevicesPage() {
                             <span className="mt-0.5 block truncate text-[13px] font-bold" style={{ color: tone.fg }}>
                               {row.Hardware}
                             </span>
-                            <span className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted">{row.firmwareVersion}</span>
+                            <span className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted" title="firmwareVersion">
+                              fw {row.firmwareVersion}
+                            </span>
+                            <span className="block truncate font-mono text-[10px] text-fg-muted" title="appVersion">
+                              app {row.appVersion}
+                            </span>
                             <span className="flex items-center justify-between gap-1 text-[10px] text-fg-subtle"><span className="truncate">{row.Country}</span><Pencil className="size-3 shrink-0 opacity-0 transition-opacity group-hover/tile:opacity-100" aria-hidden /></span>
                           </button>
                           <input

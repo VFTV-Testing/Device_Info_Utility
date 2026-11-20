@@ -1,3 +1,4 @@
+import { fieldLabel } from "../../lib/fields";
 import { AlertTriangle } from "lucide-react";
 import { RECORD_FIELDS, type DeviceRecord } from "../../../shared/types";
 import { cn } from "../../lib/cn";
@@ -72,7 +73,7 @@ export function ConflictDialog({
                     const differs = conflict.mine[field] !== latest[field];
                     return (
                       <tr key={field} className={cn("border-t border-border", differs && "bg-warning-soft")}>
-                        <td className="px-3 py-2 font-mono text-xs">{field}</td>
+                        <td className="px-3 py-2 font-mono text-xs">{fieldLabel(field)}</td>
                         <td className="px-3 py-2 font-mono text-xs">{conflict.mine[field]}</td>
                         <td className={cn("px-3 py-2 font-mono text-xs", differs && "font-semibold text-warning")}>{latest[field]}</td>
                       </tr>

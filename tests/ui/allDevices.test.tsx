@@ -21,7 +21,7 @@ const DATA: DeviceData = {
   "X101-GER-PORT1-AVSB-A": rec("67.00+1"),
   "X101-GER-PORT2-AVSB-B": rec("67.00+2"),
   "X102-GER-PORT1-GEN3-C": rec("67.00+1", "GEN3"),
-  "X102-GER-PORT2-GEN3-D": rec("68.00+3", "GEN3"),
+  "X102-GER-PORT2-GEN3-D": { ...rec("68.00+3", "GEN3"), Country: "DE_OTT" },
 };
 
 function renderAllDevices() {
@@ -52,5 +52,33 @@ describe("All Devices filters", () => {
 
     await user.click(within(list).getByRole("option", { name: /^68\.00\+3/ }));
     expect(await screen.findByText("Showing 3 of 4 records")).toBeInTheDocument();
+  });
+
+  it("treats DE_DVBC and DE_OTT as one country with two stream types", async () => {
+    renderAllDevices();
+    const user = userEvent.setup();
+    expect(await screen.findByText("countries")).toHaveAttribute("title", "Germany");
+    expect(screen.getByText("countries").parentElement).toHaveTextContent("1 countries");
+
+    await user.click(screen.getByRole("combobox", { name: "Filter by Country" }));
+    const countries = within(await screen.findByRole("listbox")).getAllByRole("option").map((o) => o.textContent);
+    expect(countries).toEqual(["DE · Germany4"]);
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("combobox", { name: "Filter by Stream type" }));
+    const list = await screen.findByRole("listbox");
+    expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["DVBC3", "OTT1"]);
+    await user.click(within(list).getByRole("option", { name: /^OTT/ }));
+    expect(await screen.findByText("Showing 1 of 4 records")).toBeInTheDocument();
+  });
+
+  it("offers no Device port or Cver filter", async () => {
+    renderAllDevices();
+    await screen.findByRole("combobox", { name: "Filter by Robot" });
+    expect(screen.queryByRole("combobox", { name: "Filter by Device port" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Filter by Cver" })).not.toBeInTheDocument();
+    for (const name of ["Platform", "Country", "Stream type", "sprintNo", "appVersion", "firmwareVersion"]) {
+      expect(screen.getByRole("combobox", { name: `Filter by ${name}` })).toBeInTheDocument();
+    }
   });
 });

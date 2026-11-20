@@ -1,3 +1,4 @@
+import { fieldLabel } from "../../lib/fields";
 import { AlertTriangle, FileUp, Info, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
@@ -208,7 +209,7 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                         <ul className="mt-1 space-y-0.5 font-mono text-xs">
                           {change.fields.map((f) => (
                             <li key={f}>
-                              <span className="text-fg-muted">{f}:</span> <span className="text-danger line-through">{change.before[f]}</span> →{" "}
+                              <span className="text-fg-muted">{fieldLabel(f)}:</span> <span className="text-danger line-through">{change.before[f]}</span> →{" "}
                               <span className="text-success">{change.after[f]}</span>
                             </li>
                           ))}

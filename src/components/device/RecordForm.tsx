@@ -17,7 +17,7 @@ export const FIELD_META: Record<RecordField, { label: string; hint: string; plac
   Cver: { label: "Cver", hint: "Client version", placeholder: "0.67.00" },
   firmwareVersion: { label: "firmwareVersion", hint: "Firmware build", placeholder: "422608.047.00150" },
   appVersion: { label: "appVersion", hint: "Application version", placeholder: "0.67.00" },
-  Hardware: { label: "Hardware", hint: "Hardware platform", placeholder: "AVSB" },
+  Hardware: { label: "Platform", hint: "Hardware field in the file", placeholder: "AVSB" },
   Country: { label: "Country", hint: "Country / service", placeholder: "DE_DVBC" },
 };
 
