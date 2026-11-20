@@ -54,7 +54,10 @@ export class GitHubFileStore implements DeviceFileStore {
     this.location = `${opts.owner}/${opts.repo}@${opts.branch}:${opts.filePath}`;
     const webBase = opts.apiUrl === "https://api.github.com" ? "https://github.com" : opts.apiUrl.replace(/\/api\/v3$/, "");
     this.repoUrl = `${webBase}/${opts.owner}/${opts.repo}/blob/${encodeURIComponent(opts.branch)}/${opts.filePath}`;
-    this.fetchFn = opts.fetchFn ?? fetch;
+    // Never call fetch as a method of this object: Cloudflare Workers (and browsers) throw
+    // "Illegal invocation" when the built-in fetch runs with `this` set to something else.
+    const fetchImpl = opts.fetchFn ?? fetch;
+    this.fetchFn = (input, init) => fetchImpl(input, init);
     this.readOnly = Boolean(opts.readOnly);
   }
 

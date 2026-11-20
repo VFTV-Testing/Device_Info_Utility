@@ -21,7 +21,10 @@ function setup(overrides: Partial<AuthHelperEnv> = {}) {
     initialText: serializeEnvDoc({ version: 1, ports: {} }),
   });
   const jwts: string[] = [];
-  const fetchFn: typeof fetch = async (input, init) => {
+  // Behaves like the built-in fetch in Cloudflare Workers: calling it as a method of another
+  // object ("Illegal invocation") must fail, exactly as it does in production.
+  const fetchFn = async function (this: unknown, input: RequestInfo | URL, init?: RequestInit) {
+    if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
     const url = new URL(String(input));
     if (url.pathname === "/app/installations/42/access_tokens") {
       jwts.push(new Headers(init?.headers).get("authorization")!.replace("Bearer ", ""));
