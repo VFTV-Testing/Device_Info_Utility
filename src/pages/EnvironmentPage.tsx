@@ -16,6 +16,7 @@ import {
   Settings2,
   Undo2,
   UploadCloud,
+  UserRound,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -137,7 +138,7 @@ function Updated({ entry }: { entry?: { at: string; by?: string } }) {
   return (
     <span title={new Date(entry.at).toLocaleString()}>
       {timeAgo(entry.at)}
-      {entry.by && <> · {entry.by}</>}
+      {entry.by && <> · by <span className="font-medium text-fg-muted">{entry.by}</span></>}
     </span>
   );
 }
@@ -939,9 +940,13 @@ function HistoryDialog({ row, onClose }: { row: PortRow | null; onClose: () => v
               )}
               <span className="ml-auto text-xs text-fg-subtle" title={new Date(item.entry.at).toLocaleString()}>
                 {new Date(item.entry.at).toLocaleDateString()} {formatTime(item.entry.at)}
-                {item.entry.by && <> · {item.entry.by}</>}
               </span>
             </div>
+            {item.entry.by && (
+              <p className="mt-1 inline-flex items-center gap-1 text-xs text-fg-muted">
+                <UserRound className="size-3.5" aria-hidden /> by <span className="font-semibold text-fg">{item.entry.by}</span>
+              </p>
+            )}
             {item.entry.note ? (
               <p className="mt-1.5 whitespace-pre-line text-[13px] text-fg">{item.entry.note}</p>
             ) : (

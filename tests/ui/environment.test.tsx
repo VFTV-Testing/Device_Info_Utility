@@ -255,6 +255,7 @@ describe("Environment tab", () => {
     expect(items[0]).toHaveTextContent("Replaced GEN3 with ZTE");
     expect(items[0]).toHaveTextContent("Current");
     expect(items[1]).toHaveTextContent("GEN3 box dead");
+    expect(items[0]).toHaveTextContent("by sai"); // who made each change is shown on every entry
   });
 
   it("lists issues in a column in the table view", async () => {
