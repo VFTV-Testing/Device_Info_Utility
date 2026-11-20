@@ -22,3 +22,9 @@ if (typeof window !== "undefined") {
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia;
 }
+
+// Filters and the view-only choice are remembered per tab (sessionStorage); start every test clean.
+import { afterEach } from "vitest";
+afterEach(() => {
+  if (typeof sessionStorage !== "undefined") sessionStorage.clear();
+});

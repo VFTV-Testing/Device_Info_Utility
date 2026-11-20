@@ -57,8 +57,8 @@ describe("All Devices filters", () => {
   it("treats DE_DVBC and DE_OTT as one country with two stream types", async () => {
     renderAllDevices();
     const user = userEvent.setup();
-    expect(await screen.findByText("countries")).toHaveAttribute("title", "Germany");
-    expect(screen.getByText("countries").parentElement).toHaveTextContent("1 countries");
+    expect(await screen.findByText("country")).toHaveAttribute("title", "Germany");
+    expect(screen.getByText("country").parentElement).toHaveTextContent("1 country");
 
     await user.click(screen.getByRole("combobox", { name: "Filter by Country" }));
     const countries = within(await screen.findByRole("listbox")).getAllByRole("option").map((o) => o.textContent);
@@ -80,5 +80,59 @@ describe("All Devices filters", () => {
     for (const name of ["Platform", "Country", "Stream type", "sprintNo", "appVersion", "firmwareVersion"]) {
       expect(screen.getByRole("combobox", { name: `Filter by ${name}` })).toBeInTheDocument();
     }
+  });
+});
+
+describe("Filters drive the summary and the JSON link", () => {
+  async function filterBySprint(user: ReturnType<typeof userEvent.setup>, sprint: RegExp) {
+    await user.click(await screen.findByRole("combobox", { name: "Filter by sprintNo" }));
+    await user.click(within(await screen.findByRole("listbox")).getByRole("option", { name: sprint }));
+    await user.keyboard("{Escape}");
+  }
+
+  it("recalculates the summary panels for the filtered records", async () => {
+    renderAllDevices();
+    const user = userEvent.setup();
+    expect(await screen.findByTestId("record-count")).toHaveAttribute("aria-label", "4 records");
+    await filterBySprint(user, /^67\.00\+1/);
+
+    expect(screen.getByTestId("record-count")).toHaveAttribute("aria-label", "2 of 4 records");
+    expect(screen.getByText("Filtered")).toBeInTheDocument();
+    expect(screen.getByText("platforms").parentElement).toHaveTextContent("2 platforms");
+    expect(screen.getByText("sprint build").parentElement).toHaveTextContent("1 sprint build");
+    // Platform mix counts follow the filters but keep every platform clickable.
+    expect(screen.getByRole("button", { name: /^AVSB/ })).toHaveTextContent("1");
+    expect(screen.getByRole("button", { name: /^GEN3/ })).toHaveTextContent("1");
+  });
+
+  it("opens JSON for exactly the filtered records, and keeps the filters on the way back", async () => {
+    renderAllDevices();
+    const user = userEvent.setup();
+    await filterBySprint(user, /^67\.00\+1/);
+    await user.click(screen.getByRole("button", { name: "View JSON (2)" }));
+
+    const content = await screen.findByLabelText("deviceInformation.json content");
+    expect(screen.getByText("Filtered: 2 of 4 records")).toBeInTheDocument();
+    expect(content).toHaveTextContent("X101-GER-PORT1-AVSB-A");
+    expect(content).toHaveTextContent("X102-GER-PORT1-GEN3-C");
+    expect(content).not.toHaveTextContent("X101-GER-PORT2-AVSB-B");
+
+    await user.click(screen.getByRole("button", { name: "Show whole file" }));
+    expect(screen.getByLabelText("deviceInformation.json content")).toHaveTextContent("X101-GER-PORT2-AVSB-B");
+
+    await user.click(screen.getByRole("button", { name: "Back to All Devices" }));
+    expect(await screen.findByTestId("record-count")).toHaveAttribute("aria-label", "2 of 4 records");
+    expect(screen.getByRole("combobox", { name: "Filter by sprintNo" })).toHaveTextContent("sprintNo: 67.00+1");
+  });
+
+  it("shows the whole file when nothing is filtered, and the top menu no longer has a JSON tab", async () => {
+    renderAllDevices();
+    const user = userEvent.setup();
+    await screen.findByTestId("record-count");
+    expect(screen.queryByRole("link", { name: /JSON Preview/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View JSON" }));
+    const content = await screen.findByLabelText("deviceInformation.json content");
+    for (const key of Object.keys(DATA)) expect(content).toHaveTextContent(key);
+    expect(screen.queryByText(/^Filtered:/)).not.toBeInTheDocument();
   });
 });

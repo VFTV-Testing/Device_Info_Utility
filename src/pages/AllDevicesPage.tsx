@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  FileJson,
   FileUp,
   LayoutGrid,
   Layers,
@@ -22,7 +23,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { naturalCompare, parseDeviceId } from "../../shared/deviceId";
+import { naturalCompare } from "../../shared/deviceId";
 import type { DeviceRecord } from "../../shared/types";
 import { pickRecord } from "../../shared/validation";
 import { DataStateGate } from "../components/common/DataStateGate";
@@ -37,21 +38,24 @@ import { useDeviceData } from "../context/DeviceDataContext";
 import { useDebouncedValue } from "../hooks";
 import { cn } from "../lib/cn";
 import { chipStyle, hardwareTones, toneOf } from "../lib/hardware";
+import {
+  buildRows,
+  COUNTRY_NAMES,
+  describeFilters,
+  EMPTY_FILTERS,
+  FILTER_LABELS,
+  FILTER_NAMES,
+  hasActiveFilters,
+  loadFilterState,
+  rowMatcher,
+  saveFilterState,
+  type FilterName,
+  type Filters,
+  type Row,
+} from "../lib/deviceFilters";
 import { ApiError } from "../services/api";
 
-interface Row extends DeviceRecord {
-  key: string;
-  device: string;
-  port: string;
-  /** Country code from the Country field, e.g. "DE" from "DE_DVBC". */
-  country: string;
-  /** Stream type from the Country field, e.g. "DVBC" from "DE_DVBC". */
-  service: string;
-}
-
 type SortColumn = "device" | "port" | "key" | keyof DeviceRecord;
-type FilterName = "device" | "Hardware" | "country" | "service" | "sprintNo" | "appVersion" | "firmwareVersion";
-type Filters = Record<FilterName, string[]>;
 type View = "cards" | "table";
 
 const COLUMNS: { id: SortColumn; label: string; className?: string }[] = [
@@ -66,42 +70,6 @@ const COLUMNS: { id: SortColumn; label: string; className?: string }[] = [
   { id: "Country", label: "Country" },
 ];
 const PAGE_SIZES = [10, 25, 50, 100];
-const FILTER_LABELS: Record<FilterName, string> = {
-  device: "Robot",
-  Hardware: "Platform",
-  country: "Country",
-  service: "Stream type",
-  sprintNo: "sprintNo",
-  appVersion: "appVersion",
-  firmwareVersion: "firmwareVersion",
-};
-const FILTER_NAMES = Object.keys(FILTER_LABELS) as FilterName[];
-const EMPTY_FILTERS = Object.fromEntries(FILTER_NAMES.map((n) => [n, []])) as unknown as Filters;
-
-/** Friendly names for the country codes used in the Country field (unknown codes show as-is). */
-const COUNTRY_NAMES: Record<string, string> = {
-  AL: "Albania",
-  CZ: "Czechia",
-  DE: "Germany",
-  ES: "Spain",
-  GB: "United Kingdom",
-  GR: "Greece",
-  HU: "Hungary",
-  IE: "Ireland",
-  IT: "Italy",
-  NL: "Netherlands",
-  PT: "Portugal",
-  RO: "Romania",
-  TR: "Türkiye",
-  UK: "United Kingdom",
-};
-
-/** "DE_DVBC" → { country: "DE", service: "DVBC" }; a value without "_" is all country. */
-function splitCountry(value: string): { country: string; service: string } {
-  const i = value.indexOf("_");
-  return i < 0 ? { country: value, service: "—" } : { country: value.slice(0, i), service: value.slice(i + 1) };
-}
-
 /** A port tile's content: a button that opens the editor, or plain content for view-only visitors. */
 function TileBody({
   editable,
@@ -171,8 +139,10 @@ export function AllDevicesPage() {
   /** View-only visitors and accounts without write access see no editing controls. */
   const canEdit = !config?.readOnly;
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  // Filters are remembered for this tab, so they survive a trip to the JSON page and back.
+  const [query, setQuery] = useState(() => loadFilterState().query);
+  const [filters, setFilters] = useState<Filters>(() => loadFilterState().filters);
+  useEffect(() => saveFilterState({ filters, query }), [filters, query]);
   const [sort, setSort] = useState<{ column: SortColumn; dir: "asc" | "desc" }>({ column: "key", dir: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -193,14 +163,7 @@ export function AllDevicesPage() {
     }
   };
 
-  const rows = useMemo<Row[]>(
-    () =>
-      Object.entries(snapshot?.data ?? {}).map(([key, record]) => {
-        const id = parseDeviceId(key);
-        return { key, device: id?.device ?? "—", port: id?.port ?? "—", ...record, ...splitCountry(record.Country) };
-      }),
-    [snapshot],
-  );
+  const rows = useMemo<Row[]>(() => buildRows(snapshot?.data ?? {}), [snapshot]);
 
   const options = useMemo(
     () => Object.fromEntries(FILTER_NAMES.map((n) => [n, uniqueSorted(rows.map((r) => r[n]))])) as Record<FilterName, string[]>,
@@ -216,27 +179,36 @@ export function AllDevicesPage() {
     }
     return result;
   }, [rows]);
-  const shownCount = useCountUp(rows.length);
-
-  const hardwareMix = useMemo(
-    () => options.Hardware.map((hw) => ({ hw, count: rows.filter((r) => r.Hardware === hw).length })).sort((a, b) => b.count - a.count),
-    [options.Hardware, rows],
-  );
-
   const filtered = useMemo(() => {
-    const sets = Object.fromEntries(Object.entries(filters).map(([k, v]) => [k, new Set(v)])) as Record<FilterName, Set<string>>;
-    const result = rows.filter((row) => {
-      for (const name of Object.keys(sets) as FilterName[]) {
-        if (sets[name].size && !sets[name].has(row[name])) return false;
-      }
-      if (!search) return true;
-      return [row.key, row.sprintNo, row.Cver, row.firmwareVersion, row.appVersion, row.Hardware, row.Country].some((v) =>
-        v.toLowerCase().includes(search),
-      );
-    });
+    const result = rows.filter(rowMatcher(filters, search));
     const dir = sort.dir === "asc" ? 1 : -1;
     return result.sort((a, b) => dir * naturalCompare(a[sort.column], b[sort.column]) || naturalCompare(a.key, b.key));
   }, [rows, filters, search, sort]);
+  const isFiltered = hasActiveFilters(filters, search);
+
+  /** The summary panels describe whatever the filters currently match. */
+  const summary = useMemo(() => {
+    const unique = (pick: (r: Row) => string) => [...new Set(filtered.map(pick))].filter((v) => v !== "—").sort(naturalCompare);
+    return {
+      robots: unique((r) => r.device),
+      platforms: unique((r) => r.Hardware),
+      countries: unique((r) => r.country),
+      services: unique((r) => r.service),
+      sprints: unique((r) => r.sprintNo),
+    };
+  }, [filtered]);
+  const shownCount = useCountUp(filtered.length);
+
+  // Every platform stays listed (0 = greyed) so it can still be clicked to filter.
+  const hardwareMix = useMemo(
+    () =>
+      options.Hardware.map((hw) => ({ hw, count: filtered.filter((r) => r.Hardware === hw).length })).sort(
+        (a, b) => b.count - a.count || naturalCompare(a.hw, b.hw),
+      ),
+    [options.Hardware, filtered],
+  );
+
+  const openJson = () => navigate("/json", { state: { fromDevices: true } });
 
   const groups = useMemo(() => {
     const map = new Map<string, Row[]>();
@@ -314,51 +286,74 @@ export function AllDevicesPage() {
             className="spotlight relative flex flex-wrap items-end gap-4 overflow-hidden rounded-3xl border border-[var(--hero-border)] bg-hero-gradient p-6 shadow-card"
           >
             <Sparkles className="pointer-events-none absolute -right-6 -top-6 size-40 text-accent opacity-[0.07]" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] text-fg-muted" title={config?.location}>
-                {config?.location ?? "deviceInformation.json"}
-              </p>
+            <div className="min-w-0 flex-1 basis-[24rem]">
+              {isFiltered ? (
+                <p className="truncate text-[13px] text-fg-muted" title={describeFilters(filters, search)}>
+                  <span className="mr-1.5 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">Filtered</span>
+                  {describeFilters(filters, search)}
+                </p>
+              ) : (
+                <p className="truncate text-[13px] text-fg-muted" title={config?.location}>
+                  {config?.location ?? "deviceInformation.json"}
+                </p>
+              )}
               <p
                 className="mt-2 bg-[linear-gradient(135deg,var(--fg),var(--accent))] bg-clip-text font-display text-7xl font-bold leading-none tracking-tight text-transparent tabular-nums"
                 data-testid="record-count"
-                aria-label={`${rows.length} records`}
+                aria-label={isFiltered ? `${filtered.length} of ${rows.length} records` : `${rows.length} records`}
               >
                 {shownCount}
               </p>
               <p className="mt-2 text-sm text-fg-muted">
-                records across <strong className="text-fg">{options.device.filter((d) => d !== "—").length}</strong> robots
+                {isFiltered ? (
+                  <>
+                    of <strong className="text-fg">{rows.length}</strong> records · across{" "}
+                    <strong className="text-fg">{summary.robots.length}</strong> robot{summary.robots.length === 1 ? "" : "s"}
+                  </>
+                ) : (
+                  <>
+                    records across <strong className="text-fg">{summary.robots.length}</strong> robots
+                  </>
+                )}
               </p>
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {(
                   [
-                    [options.Hardware.length, "platforms", options.Hardware.join(", ")],
-                    [options.country.length, "countries", options.country.map((c) => COUNTRY_NAMES[c] ?? c).join(", ")],
-                    [options.service.length, "stream types", options.service.join(", ")],
-                    [options.sprintNo.length, "sprint builds", ""],
+                    [summary.platforms.length, "platform", "platforms", summary.platforms.join(", ")],
+                    [summary.countries.length, "country", "countries", summary.countries.map((c) => COUNTRY_NAMES[c] ?? c).join(", ")],
+                    [summary.services.length, "stream type", "stream types", summary.services.join(", ")],
+                    [summary.sprints.length, "sprint build", "sprint builds", summary.sprints.join(", ")],
                   ] as const
-                ).map(([n, label, detail]) => (
+                ).map(([n, one, many, detail]) => (
                   <span
-                    key={label}
+                    key={many}
                     title={detail || undefined}
                     className="rounded-full bg-surface/60 px-2.5 py-1 text-[11px] text-fg-muted backdrop-blur"
                   >
-                    <strong className="font-semibold text-fg">{n}</strong> {label}
+                    <strong className="font-semibold text-fg">{n}</strong> {n === 1 ? one : many}
                   </span>
                 ))}
               </div>
             </div>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {canEdit && (
                 <Button variant="primary" onClick={() => setAddOpen(true)} icon={<Plus className="size-4" />}>
                   Add device
                 </Button>
               )}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {canEdit && (
                   <Button onClick={() => setImportOpen(true)} icon={<FileUp className="size-4" />}>
                     Import JSON
                   </Button>
                 )}
+                <Button
+                  onClick={openJson}
+                  icon={<FileJson className="size-4" />}
+                  title={isFiltered ? "Show the JSON of the records these filters match" : "Show the whole file as JSON"}
+                >
+                  {isFiltered ? `View JSON (${filtered.length})` : "View JSON"}
+                </Button>
                 <Button size="icon" onClick={() => void refresh()} loading={syncing} aria-label="Refresh" title="Refresh from GitHub">
                   {!syncing && <RefreshCw className="size-4" />}
                 </Button>
@@ -369,26 +364,28 @@ export function AllDevicesPage() {
           <Card className="spotlight p-6" onMouseMove={trackSpotlight}>
             <div className="flex items-baseline justify-between">
               <p className="font-display text-base font-semibold text-fg">Platform mix</p>
-              <p className="text-xs text-fg-muted">Click to filter</p>
+              <p className="text-xs text-fg-muted">{isFiltered ? `For ${filtered.length} filtered records · click to filter` : "Click to filter"}</p>
             </div>
             <div className="mt-4 flex h-3.5 gap-[3px] overflow-hidden rounded-full" role="group" aria-label="Platform mix">
-              {hardwareMix.map(({ hw, count }) => {
-                const on = filters.Hardware.length === 0 || filters.Hardware.includes(hw);
-                return (
-                  <motion.button
-                    key={hw}
-                    type="button"
-                    aria-label={`Filter by ${hw} (${count})`}
-                    title={`${hw}: ${count}`}
-                    onClick={() => toggleHardware(hw)}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${(count / Math.max(rows.length, 1)) * 100}%` }}
-                    transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                    className={cn("h-full min-w-1.5 transition-opacity hover:opacity-80", !on && "opacity-25")}
-                    style={{ backgroundColor: toneOf(tones, hw).solid }}
-                  />
-                );
-              })}
+              {hardwareMix
+                .filter(({ count }) => count > 0)
+                .map(({ hw, count }) => {
+                  const on = filters.Hardware.length === 0 || filters.Hardware.includes(hw);
+                  return (
+                    <motion.button
+                      key={hw}
+                      type="button"
+                      aria-label={`Filter by ${hw} (${count})`}
+                      title={`${hw}: ${count}`}
+                      onClick={() => toggleHardware(hw)}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(count / Math.max(filtered.length, 1)) * 100}%` }}
+                      transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                      className={cn("h-full min-w-1.5 transition-opacity hover:opacity-80", !on && "opacity-25")}
+                      style={{ backgroundColor: toneOf(tones, hw).solid }}
+                    />
+                  );
+                })}
             </div>
             <ul className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1">
               {hardwareMix.map(({ hw, count }) => {
@@ -402,6 +399,7 @@ export function AllDevicesPage() {
                       className={cn(
                         "flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[13px] transition hover:bg-surface-2",
                         active ? "font-semibold text-fg" : "text-fg-muted",
+                        count === 0 && "opacity-45",
                       )}
                     >
                       <span className="size-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: toneOf(tones, hw).solid }} />
@@ -547,7 +545,10 @@ export function AllDevicesPage() {
                             <span className="mt-0.5 block truncate text-[13px] font-bold" style={{ color: tone.fg }}>
                               {row.Hardware}
                             </span>
-                            <span className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted" title={`firmwareVersion: ${row.firmwareVersion}`}>
+                            <span
+                              className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted"
+                              title={`firmwareVersion: ${row.firmwareVersion}`}
+                            >
                               fw {row.firmwareVersion}
                             </span>
                             <span className="block truncate font-mono text-[10px] text-fg-muted" title={`appVersion: ${row.appVersion}`}>

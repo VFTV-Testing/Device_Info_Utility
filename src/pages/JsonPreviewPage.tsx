@@ -1,11 +1,13 @@
-import { CheckCircle2, ChevronDown, ChevronUp, Copy, FileJson, Lock, PencilLine, RefreshCw, Search } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Copy, FileJson, Filter, Lock, PencilLine, RefreshCw, Search } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { serializeDeviceData } from "../../shared/serialize";
 import { DataStateGate } from "../components/common/DataStateGate";
 import { Badge, Button, Card, Input, Notice } from "../components/ui/primitives";
 import { useDeviceData } from "../context/DeviceDataContext";
 import { useDebouncedValue } from "../hooks";
+import { describeFilters, filterData, hasActiveFilters, loadFilterState } from "../lib/deviceFilters";
 import { cn, formatTime, shortSha } from "../lib/cn";
 import { findMatches, segmentLine, tokenizeLine } from "../utils/jsonHighlight";
 
@@ -55,9 +57,22 @@ export function JsonPreviewPage() {
   const search = useDebouncedValue(query, 150);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const json = useMemo(() => (snapshot ? serializeDeviceData(snapshot.data) : ""), [snapshot]);
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Opened from All Devices' "View JSON": show only the records its filters match (live, so syncs are included).
+  const fromDevices = Boolean((location.state as { fromDevices?: boolean } | null)?.fromDevices);
+  const [{ filters, query: filterQuery }] = useState(loadFilterState);
+  const [showAll, setShowAll] = useState(false);
+  const filtering = fromDevices && !showAll && hasActiveFilters(filters, filterQuery);
+
+  const totalCount = snapshot ? Object.keys(snapshot.data).length : 0;
+  const shown = useMemo(
+    () => (snapshot ? (filtering ? filterData(snapshot.data, filters, filterQuery) : snapshot.data) : null),
+    [snapshot, filtering, filters, filterQuery],
+  );
+  const json = useMemo(() => (shown ? serializeDeviceData(shown) : ""), [shown]);
   const lines = useMemo(() => json.replace(/\n$/, "").split("\n"), [json]);
-  const recordCount = snapshot ? Object.keys(snapshot.data).length : 0;
+  const recordCount = shown ? Object.keys(shown).length : 0;
 
   /** Flattened list of all matches: [lineIndex, matchIndexInLine]. */
   const matches = useMemo(() => {
@@ -80,7 +95,7 @@ export function JsonPreviewPage() {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(json);
-      toast.success("JSON copied to clipboard");
+      toast.success(filtering ? `JSON of ${recordCount} filtered records copied` : "JSON copied to clipboard");
     } catch {
       toast.error("Copy failed — your browser blocked clipboard access");
     }
@@ -94,15 +109,22 @@ export function JsonPreviewPage() {
       <div className="space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">JSON Preview</h2>
-            <p className="mt-1 text-sm text-fg-muted">Read-only view of the current deviceInformation.json.</p>
+            <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">JSON Preview</h2>
+            <p className="mt-1 text-sm text-fg-muted">
+              {filtering ? "Read-only JSON of the records your All Devices filters match." : "Read-only view of the current deviceInformation.json."}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {fromDevices && (
+              <Button variant="ghost" onClick={() => navigate("/devices")} icon={<ArrowLeft className="size-4" />}>
+                Back to All Devices
+              </Button>
+            )}
             <Button onClick={() => void refresh()} loading={syncing} icon={<RefreshCw className="size-4" />}>
               Refresh
             </Button>
             <Button variant="primary" onClick={() => void copy()} icon={<Copy className="size-4" />}>
-              Copy JSON
+              {filtering ? `Copy ${recordCount} records` : "Copy JSON"}
             </Button>
           </div>
         </div>
@@ -115,13 +137,28 @@ export function JsonPreviewPage() {
           ) : (
             <Badge tone="warning">{syncing ? "Synchronising…" : "Not confirmed in sync — refresh to check"}</Badge>
           )}
-          <Badge>{recordCount} records</Badge>
+          <Badge>{filtering ? `${recordCount} of ${totalCount} records` : `${recordCount} records`}</Badge>
           {snapshot && <Badge>version {shortSha(snapshot.version)}</Badge>}
           {snapshot && <Badge>fetched {formatTime(snapshot.fetchedAt)}</Badge>}
           <Badge>
             <Lock className="size-3" /> read-only
           </Badge>
         </div>
+
+        {fromDevices && hasActiveFilters(filters, filterQuery) && (
+          <Notice
+            tone="accent"
+            icon={<Filter className="size-4" />}
+            title={filtering ? `Filtered: ${recordCount} of ${totalCount} records` : `Showing the whole file (${totalCount} records)`}
+            actions={
+              <Button size="sm" variant="secondary" onClick={() => setShowAll((v) => !v)}>
+                {filtering ? "Show whole file" : "Show filtered only"}
+              </Button>
+            }
+          >
+            {describeFilters(filters, filterQuery)}
+          </Notice>
+        )}
 
         {hasUnsavedChanges && (
           <Notice tone="warning" icon={<PencilLine className="size-4" />} title="You have unsaved edits in Device Manager">

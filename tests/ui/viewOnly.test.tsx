@@ -100,3 +100,56 @@ describe("View link", () => {
     for (const search of ["", "?code=abc&state=xyz", "?preview=1", "?reviewer"]) expect(hasViewParam(search)).toBe(false);
   });
 });
+
+describe("Viewer client fallback (company networks)", () => {
+  const ok = (body: string, etag = '"e1"') => new Response(body, { status: 200, headers: { etag } });
+  const json = JSON.stringify(DATA);
+
+  it("falls back to api.github.com when raw.githubusercontent.com is blocked, then keeps using it", async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.startsWith("https://raw.githubusercontent.com")) throw new TypeError("Failed to fetch");
+      return ok(json);
+    });
+    const client = createViewerClient(TARGET, fetchFn as unknown as typeof fetch);
+    expect((await client.getDevices()).data).toEqual(DATA);
+    const [apiUrl, apiInit] = fetchFn.mock.calls[1] as unknown as [string, RequestInit];
+    expect(apiUrl).toBe("https://api.github.com/repos/VFTV-Testing/Configs/contents/AVSB_GEN3_Configs/deviceInformation.json?ref=Main");
+    expect(JSON.stringify(apiInit.headers)).toMatch(/vnd\.github\.raw/);
+    expect(JSON.stringify(apiInit)).not.toMatch(/authorization/i);
+
+    fetchFn.mockClear();
+    await client.getDevices();
+    expect(fetchFn).toHaveBeenCalledTimes(1); // the working source is remembered
+    expect(fetchFn.mock.calls[0]![0]).toMatch(/^https:\/\/api\.github\.com/);
+  });
+
+  it("gives up on a hanging request instead of staying on 'Connecting'", async () => {
+    const fetchFn = vi.fn((url: string, init?: RequestInit) => {
+      if (url.startsWith("https://raw.githubusercontent.com")) {
+        return new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))),
+        );
+      }
+      return Promise.resolve(ok(json));
+    });
+    const client = createViewerClient(TARGET, fetchFn as unknown as typeof fetch, 30);
+    expect((await client.getDevices()).data).toEqual(DATA);
+  });
+
+  it("explains a blocked network clearly when no source works", async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const client = createViewerClient(TARGET, fetchFn as unknown as typeof fetch);
+    await expect(client.getDevices()).rejects.toMatchObject({ code: "GITHUB_UNAVAILABLE", message: expect.stringMatching(/company network/) });
+  });
+
+  it("reports GitHub's anonymous limit when that is the cause", async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.startsWith("https://raw.githubusercontent.com")) throw new TypeError("Failed to fetch");
+      return new Response("{}", { status: 403, headers: { "x-ratelimit-remaining": "0" } });
+    });
+    const client = createViewerClient(TARGET, fetchFn as unknown as typeof fetch);
+    await expect(client.getDevices()).rejects.toMatchObject({ code: "GITHUB_RATE_LIMITED" });
+  });
+});
