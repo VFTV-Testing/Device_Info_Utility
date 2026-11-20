@@ -1,14 +1,13 @@
-import { motion } from "framer-motion";
-import { ChevronDown, ChevronRight, Cpu, Eye, ExternalLink, KeyRound, Loader2, LogIn, ShieldCheck } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Button, Card, FieldLabel, Input, Notice } from "../components/ui/primitives";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight, Cpu, Eye, KeyRound, Loader2, ShieldCheck, UserCheck, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { Button, FieldLabel, Input, Notice } from "../components/ui/primitives";
 import { OAUTH_ENABLED, type GitHubTarget } from "../config";
 import { useTheme } from "../hooks";
 import { cn } from "../lib/cn";
 import { completeGitHubLogin, startGitHubLogin } from "../services/githubOAuth";
-import { clearStoredToken, readStoredCredentials, signInWithCredentials, signInWithToken, storeToken, type GitHubSession } from "../services/githubSession";
-
-const TOKEN_URL = "https://github.com/settings/personal-access-tokens/new";
+import { clearStoredToken, readStoredCredentials, signInWithCredentials, type GitHubSession } from "../services/githubSession";
+import { MODERATOR_ENABLED, storeModerator, verifyModeratorKey, type ModeratorSession } from "../services/moderator";
 
 function GitHubMark({ className }: { className?: string }) {
   return (
@@ -18,24 +17,97 @@ function GitHubMark({ className }: { className?: string }) {
   );
 }
 
+/** Moves the card's spotlight glow to the pointer (see .spotlight in index.css). */
+function trackSpotlight(event: MouseEvent<HTMLElement>) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  event.currentTarget.style.setProperty("--mx", `${event.clientX - rect.left}px`);
+  event.currentTarget.style.setProperty("--my", `${event.clientY - rect.top}px`);
+}
+
+interface ChoiceProps {
+  index: number;
+  icon: ReactNode;
+  iconClass: string;
+  who: string;
+  title: string;
+  description: string;
+  action: string;
+  ariaLabel: string;
+  active?: boolean;
+  busy?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}
+
+/** One sign-in choice: a whole-card button with lift, glow and a staggered entrance. */
+function Choice({ index, icon, iconClass, who, title, description, action, ariaLabel, active, busy, disabled, onClick }: ChoiceProps) {
+  return (
+    <motion.button
+      type="button"
+      aria-label={ariaLabel}
+      aria-pressed={active}
+      disabled={disabled || busy}
+      onClick={onClick}
+      onMouseMove={trackSpotlight}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.08 + index * 0.07, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={disabled ? undefined : { y: -5 }}
+      whileTap={disabled ? undefined : { scale: 0.985 }}
+      className={cn(
+        "glass spotlight group flex h-full flex-col gap-4 rounded-3xl border p-5 text-left shadow-card transition-[border-color,box-shadow]",
+        "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-55",
+        active ? "border-accent shadow-[0_14px_40px_var(--primary-glow)] ring-2 ring-accent/40" : "hover:border-accent/40 hover:shadow-[0_14px_40px_var(--primary-glow)]",
+      )}
+    >
+      <span className={cn("grid size-12 place-items-center rounded-2xl text-white shadow-card transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3", iconClass)}>
+        {icon}
+      </span>
+      <span className="grid gap-1">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">{who}</span>
+        <span className="font-display text-lg font-bold text-fg">{title}</span>
+        <span className="text-[13px] leading-relaxed text-fg-muted">{description}</span>
+      </span>
+      <span className="mt-auto inline-flex items-center gap-1.5 text-sm font-semibold text-accent">
+        {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+        {action}
+        <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
+      </span>
+    </motion.button>
+  );
+}
+
 export function SignInPage({
   target,
   onSignedIn,
   onViewOnly,
+  onModerator,
+  moderatorEnabled = MODERATOR_ENABLED,
+  githubEnabled = OAUTH_ENABLED,
+  verifyKey = verifyModeratorKey,
 }: {
   target: GitHubTarget;
   onSignedIn: (session: GitHubSession) => void;
   /** Opens the read-only view for people without a GitHub account. */
   onViewOnly?: () => void;
+  /** Signs in with the shared moderator pass key (Environment status updates only). */
+  onModerator?: (session: ModeratorSession) => void;
+  moderatorEnabled?: boolean;
+  githubEnabled?: boolean;
+  verifyKey?: (key: string) => Promise<void>;
 }) {
   useTheme(); // apply saved theme
-  const [token, setToken] = useState("");
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [githubBusy, setGithubBusy] = useState(false);
   const [restoring, setRestoring] = useState(true);
-  const [showToken, setShowToken] = useState(!OAUTH_ENABLED);
+  const [moderatorOpen, setModeratorOpen] = useState(false);
+  const [modName, setModName] = useState("");
+  const [modKey, setModKey] = useState("");
+  const [modBusy, setModBusy] = useState(false);
+  const [modError, setModError] = useState<string | null>(null);
   const started = useRef(false);
+  const modReady = modKey.trim().length > 0 && modName.trim().length >= 2;
 
   // On load: finish a "Sign in with GitHub" redirect, or silently restore a saved session.
   useEffect(() => {
@@ -61,17 +133,30 @@ export function SignInPage({
     })();
   }, [target, onSignedIn]);
 
-  const submitToken = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
+  const signInWithGitHub = () => {
+    setGithubBusy(true);
     setError(null);
     try {
-      const session = await signInWithToken(token, target);
-      storeToken(session.token, remember);
-      onSignedIn(session);
+      startGitHubLogin(remember);
     } catch (e) {
       setError((e as Error).message);
-      setBusy(false);
+      setGithubBusy(false);
+    }
+  };
+
+  const submitModerator = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!onModerator || !modReady) return;
+    setModBusy(true);
+    setModError(null);
+    try {
+      await verifyKey(modKey.trim());
+      const session: ModeratorSession = { name: modName.trim(), key: modKey.trim(), remember };
+      storeModerator(session);
+      onModerator(session);
+    } catch (e) {
+      setModError((e as Error).message);
+      setModBusy(false);
     }
   };
 
@@ -85,165 +170,146 @@ export function SignInPage({
     );
   }
 
-  const rememberBox = (
-    <label className="flex items-start gap-2 text-[13px] text-fg-muted">
-      <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="mt-0.5 accent-[var(--accent)]" />
-      <span>
-        Keep me signed in on this device <span className="text-fg-subtle">(only on your own computer)</span>
-      </span>
-    </label>
-  );
+  const showModerator = Boolean(onModerator && moderatorEnabled);
+  const choices = [
+    {
+      key: "github",
+      show: true,
+      icon: <GitHubMark className="size-6" />,
+      iconClass: "bg-[linear-gradient(135deg,#24292f,#4b5563)]",
+      who: "Team",
+      title: "Sign in with GitHub",
+      description: githubEnabled
+        ? `Edit devices and the environment. Changes are committed under your name (Write access to ${target.repo} needed).`
+        : "GitHub sign-in is not set up for this site.",
+      action: "Continue with GitHub",
+      ariaLabel: "Sign in with GitHub",
+      busy: githubBusy,
+      disabled: !githubEnabled,
+      onClick: signInWithGitHub,
+    },
+    {
+      key: "moderator",
+      show: showModerator,
+      icon: <KeyRound className="size-6" />,
+      iconClass: "bg-primary-gradient",
+      who: "Moderators · onsite",
+      title: "Moderator pass key",
+      description: "No GitHub account needed. Update the Environment status when you fix issues onsite.",
+      action: moderatorOpen ? "Enter your details below" : "Use the pass key",
+      ariaLabel: "Sign in as moderator",
+      active: moderatorOpen,
+      onClick: () => setModeratorOpen((open) => !open),
+    },
+    {
+      key: "view",
+      show: Boolean(onViewOnly),
+      icon: <Eye className="size-6" />,
+      iconClass: "bg-[linear-gradient(135deg,#0891b2,#22d3ee)]",
+      who: "Everyone",
+      title: "View only",
+      description: "No account needed. Browse every robot, device and environment status — read only.",
+      action: "Open the view",
+      ariaLabel: "View without signing in",
+      onClick: () => onViewOnly?.(),
+    },
+  ].filter((c) => c.show);
 
   return (
     <div className="grid min-h-dvh place-items-center px-4 py-10">
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="w-full max-w-lg">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="grid size-10 place-items-center rounded-xl bg-accent text-accent-fg shadow-card">
-            <Cpu className="size-5" aria-hidden />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold">Device Information Manager</h1>
-            <p className="text-xs text-fg-muted">
-              {target.owner}/{target.repo} · {target.branch} · {target.filePath}
-            </p>
-          </div>
-        </div>
+      <div className="w-full max-w-4xl">
+        <motion.header
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="mb-8 flex flex-col items-center gap-3 text-center"
+        >
+          <motion.span
+            className="grid size-14 place-items-center rounded-2xl bg-[linear-gradient(135deg,#6366f1,#22d3ee)] text-white shadow-[0_10px_30px_var(--primary-glow)]"
+            animate={{ rotate: [0, -4, 4, 0] }}
+            transition={{ duration: 1.2, delay: 0.3, ease: "easeInOut" }}
+          >
+            <Cpu className="size-7" aria-hidden />
+          </motion.span>
+          <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Device Information Manager</h1>
+          <p className="max-w-full truncate text-[13px] text-fg-muted" title={`${target.owner}/${target.repo} · ${target.branch} · ${target.filePath}`}>
+            {target.owner}/{target.repo} · {target.branch} · {target.filePath}
+          </p>
+          <p className="text-sm text-fg-muted">How would you like to continue?</p>
+        </motion.header>
 
         {error && (
-          <Notice tone="danger" title="Sign-in failed" className="mb-4">
+          <Notice tone="danger" title="Sign-in failed" className="mb-5">
             {error}
           </Notice>
         )}
 
-        {OAUTH_ENABLED && (
-          <Card className="p-6">
-            <h2 className="text-base font-semibold">Sign in</h2>
-            <p className="mt-1 text-[13px] text-fg-muted">
-              Use your GitHub account. Changes are committed under your name; only collaborators with write access to{" "}
-              <strong className="text-fg">
-                {target.owner}/{target.repo}
-              </strong>{" "}
-              can save.
-            </p>
-            <div className="mt-5 space-y-4">
-              {rememberBox}
-              <Button
-                variant="primary"
-                className="h-11 w-full bg-[#1f2328] text-white hover:bg-[#32383f] dark:bg-white dark:text-[#1f2328] dark:hover:bg-white/90"
-                loading={busy}
-                icon={<GitHubMark className="size-5" />}
-                onClick={() => {
-                  setBusy(true);
-                  try {
-                    startGitHubLogin(remember);
-                  } catch (e) {
-                    setError((e as Error).message);
-                    setBusy(false);
-                  }
-                }}
-              >
-                Sign in with GitHub
-              </Button>
-            </div>
-          </Card>
-        )}
+        <div className={cn("grid grid-cols-1 gap-4", choices.length === 3 ? "md:grid-cols-3" : choices.length === 2 ? "md:grid-cols-2" : "")}>
+          {choices.map(({ key, show: _show, ...props }, i) => (
+            <Choice key={key} index={i} {...props} />
+          ))}
+        </div>
 
-        <Card className={cn("p-6", OAUTH_ENABLED && "mt-4")}>
-          {OAUTH_ENABLED ? (
-            <button
-              type="button"
-              onClick={() => setShowToken((v) => !v)}
-              aria-expanded={showToken}
-              className="flex w-full items-center justify-between text-left text-[13px] font-medium text-fg-muted hover:text-fg"
+        <AnimatePresence initial={false}>
+          {moderatorOpen && showModerator && (
+            <motion.div
+              key="moderator-form"
+              initial={{ opacity: 0, height: 0, y: -8 }}
+              animate={{ opacity: 1, height: "auto", y: 0 }}
+              exit={{ opacity: 0, height: 0, y: -8 }}
+              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              className="overflow-hidden"
             >
-              <span className="flex items-center gap-2">
-                <KeyRound className="size-4" /> Use a personal access token instead
-              </span>
-              <ChevronDown className={cn("size-4 transition-transform", showToken && "rotate-180")} />
-            </button>
-          ) : (
-            <>
-              <h2 className="flex items-center gap-2 text-base font-semibold">
-                <KeyRound className="size-4 text-accent" /> Sign in with your GitHub token
-              </h2>
-              <p className="mt-1 text-[13px] text-fg-muted">
-                Changes are committed to GitHub under your own account. Only collaborators with write access to{" "}
-                <strong className="text-fg">
-                  {target.owner}/{target.repo}
-                </strong>{" "}
-                can save.
-              </p>
-            </>
-          )}
-
-          {showToken && (
-            <>
-              <form onSubmit={submitToken} className="mt-5 space-y-4">
-                <div>
-                  <FieldLabel htmlFor="gh-token">Personal access token</FieldLabel>
-                  <Input
-                    id="gh-token"
-                    type="password"
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder="github_pat_…"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    className="font-mono"
-                  />
+              <form onSubmit={(e) => void submitModerator(e)} aria-label="Moderator sign-in" className="glass mt-4 grid gap-4 rounded-3xl border p-5 shadow-card">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="flex items-center gap-2 font-display text-base font-bold">
+                      <UserCheck className="size-4 text-accent" aria-hidden /> Moderator sign-in
+                    </h2>
+                    <p className="mt-0.5 text-[13px] text-fg-muted">Your name is saved with every update you push, so the team can see who fixed what.</p>
+                  </div>
+                  <Button variant="ghost" size="icon" aria-label="Close moderator sign-in" onClick={() => setModeratorOpen(false)}>
+                    <X className="size-4" />
+                  </Button>
                 </div>
-                {rememberBox}
-                <Button type="submit" variant={OAUTH_ENABLED ? "secondary" : "primary"} className="w-full" loading={busy} icon={<LogIn className="size-4" />}>
-                  Sign in with token
-                </Button>
+                {modError && (
+                  <Notice tone="danger" title="Could not sign in">
+                    {modError}
+                  </Notice>
+                )}
+                <div className="grid gap-3 sm:grid-cols-[1fr_1.3fr_auto] sm:items-end">
+                  <div>
+                    <FieldLabel htmlFor="moderator-name">Your name</FieldLabel>
+                    <Input id="moderator-name" value={modName} maxLength={60} autoComplete="name" autoFocus onChange={(e) => setModName(e.target.value)} placeholder="e.g. Priya" />
+                  </div>
+                  <div>
+                    <FieldLabel htmlFor="moderator-key">Pass key</FieldLabel>
+                    <Input id="moderator-key" type="password" value={modKey} autoComplete="off" spellCheck={false} onChange={(e) => setModKey(e.target.value)} className="font-mono" />
+                  </div>
+                  <Button type="submit" variant="primary" className="h-10" loading={modBusy} disabled={!modReady} icon={<ArrowRight className="size-4" />}>
+                    Continue
+                  </Button>
+                </div>
               </form>
-              <div className="mt-5 border-t border-border pt-4 text-[13px] text-fg-muted">
-                <p className="mb-2 flex items-center gap-2 font-medium text-fg">
-                  <ShieldCheck className="size-4 text-success" /> Create a token (about 2 minutes)
-                </p>
-                <ol className="list-decimal space-y-1 pl-5">
-                  <li>
-                    Open{" "}
-                    <a href={TOKEN_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-medium text-accent hover:underline">
-                      GitHub → New fine-grained token <ExternalLink className="size-3" />
-                    </a>
-                    .
-                  </li>
-                  <li>
-                    <strong className="text-fg">Resource owner:</strong> {target.owner}.
-                  </li>
-                  <li>
-                    <strong className="text-fg">Repository access:</strong> Only select repositories → <strong className="text-fg">{target.repo}</strong>.
-                  </li>
-                  <li>
-                    <strong className="text-fg">Permissions → Contents:</strong> Read and write.
-                  </li>
-                  <li>Generate, copy and paste it above. Treat it like a password.</li>
-                </ol>
-              </div>
-            </>
+            </motion.div>
           )}
-        </Card>
+        </AnimatePresence>
 
-        {onViewOnly && (
-          <button
-            type="button"
-            onClick={onViewOnly}
-            className="group mt-4 flex w-full items-center gap-3 rounded-3xl border border-border bg-surface/70 p-5 text-left shadow-card backdrop-blur transition hover:-translate-y-0.5 hover:border-accent/40"
-          >
-            <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent">
-              <Eye className="size-5" aria-hidden />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-semibold text-fg">View without signing in</span>
-              <span className="block text-[13px] text-fg-muted">No GitHub account needed. Browse every robot, device and filter — read only.</span>
-            </span>
-            <ChevronRight className="size-5 text-fg-subtle transition group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden />
-          </button>
-        )}
-
-        <p className="mt-4 text-center text-xs text-fg-subtle">Your sign-in is used only to talk to GitHub and is stored only in this browser.</p>
-      </motion.div>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.35 }}
+          className="mt-6 flex flex-col items-center gap-2 text-center"
+        >
+          <label className="inline-flex items-center gap-2 text-[13px] text-fg-muted">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="size-4 accent-[var(--primary-from)]" />
+            Keep me signed in on this device <span className="text-fg-subtle">(only on your own computer)</span>
+          </label>
+          <p className="inline-flex items-center gap-1.5 text-xs text-fg-subtle">
+            <ShieldCheck className="size-3.5" aria-hidden /> Your sign-in is stored only in this browser.
+          </p>
+        </motion.div>
+      </div>
     </div>
   );
 }

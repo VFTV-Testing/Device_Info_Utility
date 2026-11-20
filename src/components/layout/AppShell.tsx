@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { NavLink, useLocation, useOutlet } from "react-router-dom";
 import { Toaster } from "sonner";
 import { useAuth } from "../../context/AuthContext";
+import { useModerator } from "../../context/ModeratorContext";
 import { useViewMode } from "../../context/ViewModeContext";
 import { useDeviceData } from "../../context/DeviceDataContext";
 import { useBackground, useBeforeUnload, useTheme } from "../../hooks";
@@ -37,8 +38,9 @@ export function AppShell() {
   const [background, setBackground] = useBackground();
   const auth = useAuth();
   const viewMode = useViewMode();
+  const moderator = useModerator();
   // View-only visitors cannot edit, so the editor page is not offered to them.
-  const nav = viewMode ? NAV.filter((item) => item.to !== "/") : NAV;
+  const nav = viewMode || moderator ? NAV.filter((item) => item.to !== "/") : NAV;
   const location = useLocation();
   const outlet = useOutlet();
   const scrolled = useScrolled();
@@ -145,6 +147,16 @@ export function AppShell() {
               <Button variant="secondary" size="sm" onClick={viewMode.exit} icon={<LogIn className="size-3.5" aria-hidden />}>
                 Sign in to edit
               </Button>
+            )}
+            {moderator && (
+              <>
+                <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-accent-soft px-3 text-xs font-semibold text-accent" title="Signed in with the moderator key">
+                  <UserRound className="size-3.5" aria-hidden /> Moderator · {moderator.name}
+                </span>
+                <Button variant="secondary" size="sm" onClick={moderator.signOut} icon={<LogOut className="size-3.5" aria-hidden />}>
+                  Sign out
+                </Button>
+              </>
             )}
             {auth && (
               <Button

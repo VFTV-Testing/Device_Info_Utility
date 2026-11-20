@@ -179,7 +179,10 @@ export function EnvironmentPage() {
   const doc = env?.data?.doc;
   const pending = env?.pending ?? {};
   const pendingCount = Object.keys(pending).length;
-  const canEdit = Boolean(env?.data && !env.data.readOnly && !config?.viewOnly);
+  // View-only readers get a read-only client; moderators and team members can update.
+  const canEdit = Boolean(env?.data && !env.data.readOnly);
+  /** Setup info stays with the team: moderators change status only. */
+  const canEditSetup = !config?.moderator;
 
   /** Every robot port from the device file, plus any port that only exists in the environment file. */
   const ports = useMemo<PortRow[]>(() => {
@@ -565,7 +568,7 @@ export function EnvironmentPage() {
         )}
       </AnimatePresence>
 
-      <UpdateDialog row={editing} onClose={() => setEditing(null)} />
+      <UpdateDialog row={editing} onClose={() => setEditing(null)} canEditSetup={canEditSetup} />
       <HistoryDialog row={viewingHistory} onClose={() => setViewingHistory(null)} />
       <ReviewDialog open={reviewOpen} onClose={() => setReviewOpen(false)} rows={portRows} />
       <ConfirmDialog
@@ -655,7 +658,7 @@ function PortItem({
   );
 }
 
-function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => void }) {
+function UpdateDialog({ row, onClose, canEditSetup }: { row: PortRow | null; onClose: () => void; canEditSetup: boolean }) {
   const env = useEnvironment();
   const [setup, setSetup] = useState("");
   const [status, setStatus] = useState<EnvStatus>("ok");
@@ -672,7 +675,7 @@ function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => vo
     setNote(from?.note ?? "");
   }, [row]);
 
-  const setupChanged = Boolean(row) && setup.trim() !== (row?.setup ?? "");
+  const setupChanged = canEditSetup && Boolean(row) && setup.trim() !== (row?.setup ?? "");
   const latest = row?.latest;
   // A port with no report only gets a status entry when something is actually said about it.
   const statusChanged = latest
@@ -733,10 +736,13 @@ function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => vo
             id="env-setup"
             value={setup}
             maxLength={MAX_SETUP_LENGTH}
+            disabled={!canEditSetup}
             onChange={(e) => setSetup(e.target.value)}
-            placeholder="e.g. Router 3 Port2 · VLAN 202 · Manual device · Wi-Fi VCOE8"
+            placeholder={canEditSetup ? "e.g. Router 3 Port2 · VLAN 202 · Manual device · Wi-Fi VCOE8" : "—"}
           />
-          <p className="mt-1 text-xs text-fg-muted">Permanent facts about this port. Always shown on the card, whatever the status.</p>
+          <p className="mt-1 text-xs text-fg-muted">
+            {canEditSetup ? "Permanent facts about this port. Always shown on the card, whatever the status." : "Set by the team. Moderators can't change it."}
+          </p>
         </div>
 
         <div>

@@ -12,6 +12,10 @@ const env = {
   GITHUB_CLIENT_ID: process.env.OAUTH_CLIENT_ID ?? "",
   GITHUB_CLIENT_SECRET: process.env.OAUTH_CLIENT_SECRET ?? "",
   ALLOWED_ORIGINS: process.env.OAUTH_ALLOWED_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:4321",
+  MODERATOR_KEY: process.env.MODERATOR_KEY,
+  GITHUB_APP_ID: process.env.GITHUB_APP_ID,
+  GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY,
+  GITHUB_APP_INSTALLATION_ID: process.env.GITHUB_APP_INSTALLATION_ID,
 };
 const port = Number(process.env.OAUTH_HELPER_PORT) || 8787;
 

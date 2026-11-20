@@ -112,7 +112,11 @@ export function DataStateGate({ children }: { children: ReactNode }) {
 
   return (
     <>
-      {config?.viewOnly ? (
+      {config?.moderator ? (
+        <Notice tone="accent" icon={<Eye className="size-4" />} title={`Signed in as ${config.moderator} (moderator)`} className="mb-5">
+          You can update the <strong>Environment</strong> status. Device information and setup info are read only.
+        </Notice>
+      ) : config?.viewOnly ? (
         <Notice tone="accent" icon={<Eye className="size-4" />} title="You are viewing without signing in" className="mb-5">
           Everything is read only and refreshes automatically (changes appear within about 5 minutes). Team members with access to{" "}
           <code className="text-xs">{config.location}</code> can use <strong>Sign in to edit</strong> at the top.

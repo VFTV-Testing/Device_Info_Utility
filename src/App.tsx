@@ -5,6 +5,7 @@ import { DATA_MODE, ENV_TARGET, GITHUB_TARGET } from "./config";
 import { AuthContext } from "./context/AuthContext";
 import { DeviceDataProvider, useDeviceData } from "./context/DeviceDataContext";
 import { EnvironmentProvider } from "./context/EnvironmentContext";
+import { ModeratorContext } from "./context/ModeratorContext";
 import { rememberViewMode, ViewModeContext, wantsViewMode } from "./context/ViewModeContext";
 import { AllDevicesPage } from "./pages/AllDevicesPage";
 import { DeviceManagerPage } from "./pages/DeviceManagerPage";
@@ -14,11 +15,13 @@ import { SignInPage } from "./pages/SignInPage";
 import { api } from "./services/api";
 import { clearStoredToken, createDirectClient, type GitHubSession } from "./services/githubSession";
 import { createDirectEnvClient, createViewerEnvClient, serverEnvApi } from "./services/environmentClient";
+import { clearModerator, createModeratorEnvClient, readModerator, type ModeratorSession } from "./services/moderator";
 import { createViewerClient } from "./services/viewerClient";
 
 /** View-only visitors have no editor, so the home page becomes All Devices for them. */
 function HomeRoute() {
   const { config } = useDeviceData();
+  if (config?.moderator) return <Navigate to="/environment" replace />;
   return config?.viewOnly ? <Navigate to="/devices" replace /> : <DeviceManagerPage />;
 }
 
@@ -51,10 +54,24 @@ function getRouter(): AppRouter {
 function DirectApp() {
   const [session, setSession] = useState<GitHubSession | null>(null);
   const [viewOnly, setViewOnly] = useState(wantsViewMode);
+  const [moderator, setModerator] = useState<ModeratorSession | null>(readModerator);
   const client = useMemo(() => (session ? createDirectClient(GITHUB_TARGET, session) : null), [session]);
   const viewerClient = useMemo(() => (viewOnly ? createViewerClient(GITHUB_TARGET) : null), [viewOnly]);
   const envClient = useMemo(() => (session ? createDirectEnvClient(ENV_TARGET, session) : null), [session]);
   const viewerEnvClient = useMemo(() => (viewOnly ? createViewerEnvClient(ENV_TARGET) : null), [viewOnly]);
+  // Moderators read devices like the view-only link (with their name on the config) and push Environment status via the helper.
+  const moderatorClients = useMemo(() => {
+    if (!moderator) return null;
+    const viewer = createViewerClient(GITHUB_TARGET);
+    return {
+      devices: { ...viewer, getConfig: async () => ({ ...(await viewer.getConfig()), moderator: moderator.name }) },
+      environment: createModeratorEnvClient(ENV_TARGET, moderator),
+    };
+  }, [moderator]);
+  const signOutModerator = useCallback(() => {
+    clearModerator();
+    setModerator(null);
+  }, []);
   const signOut = useCallback(() => {
     clearStoredToken();
     setSession(null);
@@ -68,6 +85,17 @@ function DirectApp() {
     setViewOnly(false);
   }, []);
 
+  if (!session && moderator && moderatorClients) {
+    return (
+      <ModeratorContext.Provider value={{ name: moderator.name, signOut: signOutModerator }}>
+        <DeviceDataProvider key={`moderator-${moderator.name}`} client={moderatorClients.devices}>
+          <EnvironmentProvider client={moderatorClients.environment}>
+            <RouterProvider router={getRouter()} />
+          </EnvironmentProvider>
+        </DeviceDataProvider>
+      </ModeratorContext.Provider>
+    );
+  }
   if (!session && viewOnly && viewerClient && viewerEnvClient) {
     return (
       <ViewModeContext.Provider value={{ exit: exitViewOnly }}>
@@ -79,7 +107,9 @@ function DirectApp() {
       </ViewModeContext.Provider>
     );
   }
-  if (!session || !client || !envClient) return <SignInPage target={GITHUB_TARGET} onSignedIn={setSession} onViewOnly={enterViewOnly} />;
+  if (!session || !client || !envClient) {
+    return <SignInPage target={GITHUB_TARGET} onSignedIn={setSession} onViewOnly={enterViewOnly} onModerator={setModerator} />;
+  }
   return (
     <AuthContext.Provider value={{ session, signOut }}>
       <DeviceDataProvider key={session.login} client={client}>

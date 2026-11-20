@@ -11,8 +11,12 @@
  *   POST /token    { code }           → { access_token, expires_in, refresh_token, refresh_token_expires_in }
  *   POST /refresh  { refresh_token }  → same shape
  *   GET  /health                      → { ok: true }
+ * Plus moderator access for the Environment tab (see moderator.ts):
+ *   POST /moderator/verify, POST /environment/entries
  */
-export interface AuthHelperEnv {
+import { handleModeratorRequest, isModeratorPath, type ModeratorEnv } from "./moderator";
+
+export interface AuthHelperEnv extends ModeratorEnv {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   /** Comma-separated list of page origins allowed to call the helper, e.g. "https://vftv-testing.github.io,http://localhost:5173". */
@@ -49,7 +53,7 @@ export async function handleAuthRequest(request: Request, env: AuthHelperEnv, fe
       headers: {
         "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Access-Control-Max-Age": "86400",
         Vary: "Origin",
       },
@@ -57,6 +61,11 @@ export async function handleAuthRequest(request: Request, env: AuthHelperEnv, fe
   }
 
   if (request.method === "GET" && url.pathname.endsWith("/health")) return json({ ok: true }, 200, origin);
+
+  if (isModeratorPath(url.pathname)) {
+    if (!origin) return json({ error: "origin_not_allowed", error_description: "This site is not allowed to use the helper." }, 403, null);
+    return handleModeratorRequest(request, env, (body, status) => json(body, status, origin), fetchFn);
+  }
 
   const isToken = url.pathname.endsWith("/token");
   const isRefresh = url.pathname.endsWith("/refresh");
