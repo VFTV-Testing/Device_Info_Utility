@@ -4,10 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Static hosting has no server headers: this policy blocks third-party scripts and lets the
-         page talk only to itself, api.github.com and the sign-in helper (so a user's token cannot be sent anywhere else). -->
+         page talk only to itself, api.github.com, raw.githubusercontent.com (view-only mode) and the sign-in helper (so a user's token cannot be sent anywhere else). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://avatars.githubusercontent.com; font-src 'self' data:; connect-src 'self' https://api.github.com __AUTH_HELPER_ORIGIN__; base-uri 'self'; form-action 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://avatars.githubusercontent.com; font-src 'self' data:; connect-src 'self' https://api.github.com https://raw.githubusercontent.com __AUTH_HELPER_ORIGIN__; base-uri 'self'; form-action 'self'"
     />
     <meta name="referrer" content="no-referrer" />
     <meta name="description" content="View and maintain device information stored in deviceInformation.json on GitHub." />

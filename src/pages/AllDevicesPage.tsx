@@ -19,7 +19,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { naturalCompare, parseDeviceId } from "../../shared/deviceId";
@@ -102,6 +102,28 @@ function splitCountry(value: string): { country: string; service: string } {
   return i < 0 ? { country: value, service: "—" } : { country: value.slice(0, i), service: value.slice(i + 1) };
 }
 
+/** A port tile's content: a button that opens the editor, or plain content for view-only visitors. */
+function TileBody({
+  editable,
+  onClick,
+  disabled,
+  label,
+  children,
+}: {
+  editable: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  label: string;
+  children: ReactNode;
+}) {
+  if (!editable) return <div className="block w-full">{children}</div>;
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} aria-label={label} className="block w-full text-left focus-visible:outline-none">
+      {children}
+    </button>
+  );
+}
+
 /** Moves the card's spotlight glow to the pointer (see .spotlight in index.css). */
 function trackSpotlight(event: MouseEvent<HTMLElement>) {
   const rect = event.currentTarget.getBoundingClientRect();
@@ -146,6 +168,8 @@ function readView(): View {
 
 export function AllDevicesPage() {
   const { snapshot, refresh, syncing, deleteRecord, writing, config } = useDeviceData();
+  /** View-only visitors and accounts without write access see no editing controls. */
+  const canEdit = !config?.readOnly;
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -324,13 +348,17 @@ export function AllDevicesPage() {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <Button variant="primary" onClick={() => setAddOpen(true)} icon={<Plus className="size-4" />}>
-                Add device
-              </Button>
-              <div className="flex gap-2">
-                <Button onClick={() => setImportOpen(true)} icon={<FileUp className="size-4" />}>
-                  Import JSON
+              {canEdit && (
+                <Button variant="primary" onClick={() => setAddOpen(true)} icon={<Plus className="size-4" />}>
+                  Add device
                 </Button>
+              )}
+              <div className="flex gap-2">
+                {canEdit && (
+                  <Button onClick={() => setImportOpen(true)} icon={<FileUp className="size-4" />}>
+                    Import JSON
+                  </Button>
+                )}
                 <Button size="icon" onClick={() => void refresh()} loading={syncing} aria-label="Refresh" title="Refresh from GitHub">
                   {!syncing && <RefreshCw className="size-4" />}
                 </Button>
@@ -404,7 +432,11 @@ export function AllDevicesPage() {
               />
             </div>
             {activeFilters > 0 && (
-              <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 px-2 text-xs font-medium text-accent hover:underline">
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex items-center gap-1 px-2 text-xs font-medium text-accent hover:underline"
+              >
                 <X className="size-3" /> Clear all
               </button>
             )}
@@ -485,13 +517,15 @@ export function AllDevicesPage() {
                   className="glass spotlight group flex flex-col gap-3 rounded-3xl border p-4 shadow-card transition hover:-translate-y-1 hover:border-accent/35 hover:shadow-[0_12px_40px_var(--primary-glow)]"
                 >
                   <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={allOn}
-                      onChange={() => toggleSelected(keys)}
-                      aria-label={`Select all records of ${device}`}
-                      className="size-4 accent-[var(--primary-from)]"
-                    />
+                    {canEdit && (
+                      <input
+                        type="checkbox"
+                        checked={allOn}
+                        onChange={() => toggleSelected(keys)}
+                        aria-label={`Select all records of ${device}`}
+                        className="size-4 accent-[var(--primary-from)]"
+                      />
+                    )}
                     <p className="min-w-0 truncate font-display text-xl font-bold text-fg">{device}</p>
                     <span className="ml-auto shrink-0 text-xs text-fg-muted">
                       {deviceRows.length} record{deviceRows.length === 1 ? "" : "s"}
@@ -508,35 +542,36 @@ export function AllDevicesPage() {
                           style={{ backgroundColor: tone.soft }}
                           title={row.key}
                         >
-                          <button
-                            type="button"
-                            onClick={() => edit(row)}
-                            disabled={row.device === "—"}
-                            aria-label={`Edit ${row.key}`}
-                            className="block w-full text-left focus-visible:outline-none"
-                          >
+                          <TileBody editable={canEdit} onClick={() => edit(row)} disabled={row.device === "—"} label={`Edit ${row.key}`}>
                             <span className="block text-[11px] font-semibold text-fg-muted">{row.port}</span>
                             <span className="mt-0.5 block truncate text-[13px] font-bold" style={{ color: tone.fg }}>
                               {row.Hardware}
                             </span>
-                            <span className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted" title="firmwareVersion">
+                            <span className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted" title={`firmwareVersion: ${row.firmwareVersion}`}>
                               fw {row.firmwareVersion}
                             </span>
-                            <span className="block truncate font-mono text-[10px] text-fg-muted" title="appVersion">
+                            <span className="block truncate font-mono text-[10px] text-fg-muted" title={`appVersion: ${row.appVersion}`}>
                               app {row.appVersion}
                             </span>
-                            <span className="flex items-center justify-between gap-1 text-[10px] text-fg-subtle"><span className="truncate">{row.Country}</span><Pencil className="size-3 shrink-0 opacity-0 transition-opacity group-hover/tile:opacity-100" aria-hidden /></span>
-                          </button>
-                          <input
-                            type="checkbox"
-                            checked={on}
-                            onChange={() => toggleSelected([row.key])}
-                            aria-label={`Select ${row.key}`}
-                            className={cn(
-                              "absolute right-2 top-2 size-3.5 accent-[var(--primary-from)] transition-opacity",
-                              on ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100",
-                            )}
-                          />
+                            <span className="flex items-center justify-between gap-1 text-[10px] text-fg-subtle">
+                              <span className="truncate">{row.Country}</span>
+                              {canEdit && (
+                                <Pencil className="size-3 shrink-0 opacity-0 transition-opacity group-hover/tile:opacity-100" aria-hidden />
+                              )}
+                            </span>
+                          </TileBody>
+                          {canEdit && (
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() => toggleSelected([row.key])}
+                              aria-label={`Select ${row.key}`}
+                              className={cn(
+                                "absolute right-2 top-2 size-3.5 accent-[var(--primary-from)] transition-opacity",
+                                on ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100",
+                              )}
+                            />
+                          )}
                         </div>
                       );
                     })}
@@ -544,14 +579,16 @@ export function AllDevicesPage() {
                 </motion.div>
               );
             })}
-            <button
-              type="button"
-              onClick={() => setAddOpen(true)}
-              className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-border-strong text-sm font-semibold text-accent transition hover:border-accent/50 hover:bg-accent-soft"
-            >
-              <Plus className="size-6" aria-hidden />
-              Add device
-            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setAddOpen(true)}
+                className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-border-strong text-sm font-semibold text-accent transition hover:border-accent/50 hover:bg-accent-soft"
+              >
+                <Plus className="size-6" aria-hidden />
+                Add device
+              </button>
+            )}
           </div>
         ) : (
           <Card className="overflow-hidden">
@@ -559,15 +596,22 @@ export function AllDevicesPage() {
               <table className="w-full min-w-[1140px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left">
-                    <th scope="col" className="w-10 px-3 py-3">
-                      <input
-                        type="checkbox"
-                        checked={allVisibleSelected}
-                        onChange={() => toggleSelected(visible.map((r) => r.key), !allVisibleSelected)}
-                        aria-label="Select all records on this page"
-                        className="size-4 accent-[var(--primary-from)]"
-                      />
-                    </th>
+                    {canEdit && (
+                      <th scope="col" className="w-10 px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={allVisibleSelected}
+                          onChange={() =>
+                            toggleSelected(
+                              visible.map((r) => r.key),
+                              !allVisibleSelected,
+                            )
+                          }
+                          aria-label="Select all records on this page"
+                          className="size-4 accent-[var(--primary-from)]"
+                        />
+                      </th>
+                    )}
                     {COLUMNS.map((col) => {
                       const active = sort.column === col.id;
                       const Icon = active ? (sort.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
@@ -585,9 +629,11 @@ export function AllDevicesPage() {
                         </th>
                       );
                     })}
-                    <th scope="col" className="px-3 py-3 text-right text-xs font-medium text-fg-muted">
-                      Actions
-                    </th>
+                    {canEdit && (
+                      <th scope="col" className="px-3 py-3 text-right text-xs font-medium text-fg-muted">
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -598,15 +644,17 @@ export function AllDevicesPage() {
                         key={row.key}
                         className={cn("border-b border-border transition-colors last:border-0 hover:bg-accent-soft/50", on && "bg-accent-soft/60")}
                       >
-                        <td className="px-3 py-2.5">
-                          <input
-                            type="checkbox"
-                            checked={on}
-                            onChange={() => toggleSelected([row.key])}
-                            aria-label={`Select ${row.key}`}
-                            className="size-4 accent-[var(--primary-from)]"
-                          />
-                        </td>
+                        {canEdit && (
+                          <td className="px-3 py-2.5">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() => toggleSelected([row.key])}
+                              aria-label={`Select ${row.key}`}
+                              className="size-4 accent-[var(--primary-from)]"
+                            />
+                          </td>
+                        )}
                         <td className="whitespace-nowrap px-3 py-2.5 font-semibold">{row.device}</td>
                         <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{row.port}</td>
                         <td className="break-all px-3 py-2.5 font-mono text-xs text-fg-muted">{row.key}</td>
@@ -620,29 +668,31 @@ export function AllDevicesPage() {
                           </span>
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{row.Country}</td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-right">
-                          <div className="inline-flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              aria-label={`Edit ${row.key}`}
-                              disabled={row.device === "—"}
-                              title={row.device === "—" ? "This identifier does not follow the naming convention" : undefined}
-                              onClick={() => edit(row)}
-                              icon={<Pencil className="size-3.5" />}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="danger-ghost"
-                              aria-label={`Delete ${row.key}`}
-                              disabled={writing}
-                              onClick={() => setToDelete(row)}
-                              icon={<Trash2 className="size-3.5" />}
-                            />
-                          </div>
-                        </td>
+                        {canEdit && (
+                          <td className="whitespace-nowrap px-3 py-2.5 text-right">
+                            <div className="inline-flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                aria-label={`Edit ${row.key}`}
+                                disabled={row.device === "—"}
+                                title={row.device === "—" ? "This identifier does not follow the naming convention" : undefined}
+                                onClick={() => edit(row)}
+                                icon={<Pencil className="size-3.5" />}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="danger-ghost"
+                                aria-label={`Delete ${row.key}`}
+                                disabled={writing}
+                                onClick={() => setToDelete(row)}
+                                icon={<Trash2 className="size-3.5" />}
+                              />
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -668,11 +718,16 @@ export function AllDevicesPage() {
                     </option>
                   ))}
                 </NativeSelect>
-                {filtered.length > visible.length && (
+                {canEdit && filtered.length > visible.length && (
                   <button
                     type="button"
                     className="ml-2 font-medium text-accent hover:underline"
-                    onClick={() => toggleSelected(filtered.map((r) => r.key), true)}
+                    onClick={() =>
+                      toggleSelected(
+                        filtered.map((r) => r.key),
+                        true,
+                      )
+                    }
                   >
                     Select all {filtered.length} matching
                   </button>
@@ -688,7 +743,13 @@ export function AllDevicesPage() {
                 <span>
                   Page {currentPage} / {pageCount}
                 </span>
-                <Button size="icon" variant="ghost" aria-label="Next page" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label="Next page"
+                  disabled={currentPage >= pageCount}
+                  onClick={() => setPage(currentPage + 1)}
+                >
                   <ChevronRight className="size-4" />
                 </Button>
               </div>
@@ -699,7 +760,7 @@ export function AllDevicesPage() {
 
       {/* Floating selection bar */}
       <AnimatePresence>
-        {selectedKeys.length > 0 && (
+        {canEdit && selectedKeys.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}

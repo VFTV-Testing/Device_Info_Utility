@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Cpu, FileJson, GitBranch, HardDrive, LayoutGrid, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { Cpu, Eye, FileJson, GitBranch, HardDrive, LayoutGrid, LogIn, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, useLocation, useOutlet } from "react-router-dom";
 import { Toaster } from "sonner";
 import { useAuth } from "../../context/AuthContext";
+import { useViewMode } from "../../context/ViewModeContext";
 import { useDeviceData } from "../../context/DeviceDataContext";
 import { useBackground, useBeforeUnload, useTheme } from "../../hooks";
 import { cn } from "../../lib/cn";
@@ -35,6 +36,9 @@ export function AppShell() {
   const [theme, toggleTheme] = useTheme();
   const [background, setBackground] = useBackground();
   const auth = useAuth();
+  const viewMode = useViewMode();
+  // View-only visitors cannot edit, so the editor page is not offered to them.
+  const nav = viewMode ? NAV.filter((item) => item.to !== "/") : NAV;
   const location = useLocation();
   const outlet = useOutlet();
   const scrolled = useScrolled();
@@ -81,7 +85,7 @@ export function AppShell() {
 
           <nav aria-label="Main" className="order-last w-full overflow-x-auto lg:order-none lg:ml-4 lg:w-auto">
             <ul className="flex w-max gap-1 rounded-full bg-surface-2/70 p-1">
-              {NAV.map(({ to, label, icon: Icon, end }) => (
+              {nav.map(({ to, label, icon: Icon, end }) => (
                 <li key={to}>
                   <NavLink
                     to={to}
@@ -113,6 +117,11 @@ export function AppShell() {
           </nav>
 
           <div className="ml-auto flex items-center gap-1.5">
+            {viewMode && (
+              <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-accent-soft px-3 text-xs font-semibold text-accent">
+                <Eye className="size-3.5" aria-hidden /> View only
+              </span>
+            )}
             <SyncControl />
             {config?.user && (
               <span
@@ -132,6 +141,11 @@ export function AppShell() {
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
             <AppearanceMenu theme={theme} onToggleTheme={toggleTheme} background={background} onBackground={setBackground} />
+            {viewMode && (
+              <Button variant="secondary" size="sm" onClick={viewMode.exit} icon={<LogIn className="size-3.5" aria-hidden />}>
+                Sign in to edit
+              </Button>
+            )}
             {auth && (
               <Button
                 variant="ghost"

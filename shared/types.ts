@@ -76,6 +76,8 @@ export interface AppConfigInfo {
   authEnabled: boolean;
   /** True when the server has no write credentials — saving is disabled. */
   readOnly: boolean;
+  /** View-only visitor without a GitHub sign-in (e.g. management). Editing UI is hidden. */
+  viewOnly?: boolean;
   user?: string;
 }
 

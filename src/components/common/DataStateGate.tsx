@@ -1,4 +1,4 @@
-import { AlertTriangle, FilePlus2, Lock, RefreshCw, WifiOff } from "lucide-react";
+import { AlertTriangle, Eye, FilePlus2, Lock, RefreshCw, WifiOff } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useDeviceData } from "../../context/DeviceDataContext";
@@ -112,7 +112,12 @@ export function DataStateGate({ children }: { children: ReactNode }) {
 
   return (
     <>
-      {config?.readOnly && (
+      {config?.viewOnly ? (
+        <Notice tone="accent" icon={<Eye className="size-4" />} title="You are viewing without signing in" className="mb-5">
+          Everything is read only and refreshes automatically (changes appear within about 5 minutes). Team members with access to{" "}
+          <code className="text-xs">{config.location}</code> can use <strong>Sign in to edit</strong> at the top.
+        </Notice>
+      ) : config?.readOnly && (
         <Notice tone="warning" icon={<Lock className="size-4" />} title="Read-only — changes cannot be saved" className="mb-5">
           {config.authEnabled && config.user ? (
             <>

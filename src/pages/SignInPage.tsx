@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ChevronDown, Cpu, ExternalLink, KeyRound, Loader2, LogIn, ShieldCheck } from "lucide-react";
+import { ChevronDown, ChevronRight, Cpu, Eye, ExternalLink, KeyRound, Loader2, LogIn, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, Card, FieldLabel, Input, Notice } from "../components/ui/primitives";
 import { OAUTH_ENABLED, type GitHubTarget } from "../config";
@@ -18,7 +18,16 @@ function GitHubMark({ className }: { className?: string }) {
   );
 }
 
-export function SignInPage({ target, onSignedIn }: { target: GitHubTarget; onSignedIn: (session: GitHubSession) => void }) {
+export function SignInPage({
+  target,
+  onSignedIn,
+  onViewOnly,
+}: {
+  target: GitHubTarget;
+  onSignedIn: (session: GitHubSession) => void;
+  /** Opens the read-only view for people without a GitHub account. */
+  onViewOnly?: () => void;
+}) {
   useTheme(); // apply saved theme
   const [token, setToken] = useState("");
   const [remember, setRemember] = useState(false);
@@ -215,6 +224,23 @@ export function SignInPage({ target, onSignedIn }: { target: GitHubTarget; onSig
             </>
           )}
         </Card>
+
+        {onViewOnly && (
+          <button
+            type="button"
+            onClick={onViewOnly}
+            className="group mt-4 flex w-full items-center gap-3 rounded-3xl border border-border bg-surface/70 p-5 text-left shadow-card backdrop-blur transition hover:-translate-y-0.5 hover:border-accent/40"
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent">
+              <Eye className="size-5" aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-semibold text-fg">View without signing in</span>
+              <span className="block text-[13px] text-fg-muted">No GitHub account needed. Browse every robot, device and filter — read only.</span>
+            </span>
+            <ChevronRight className="size-5 text-fg-subtle transition group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden />
+          </button>
+        )}
 
         <p className="mt-4 text-center text-xs text-fg-subtle">Your sign-in is used only to talk to GitHub and is stored only in this browser.</p>
       </motion.div>
