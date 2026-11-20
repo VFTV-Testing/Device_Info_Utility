@@ -5,6 +5,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # Environment status updates (commits from the app) are data only — no rebuild needed.
+    paths-ignore:
+      - "environment/**"
   workflow_dispatch:
 
 permissions:

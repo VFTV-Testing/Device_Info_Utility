@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Cpu, Eye, GitBranch, HardDrive, LayoutGrid, LogIn, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { Activity, Cpu, Eye, GitBranch, HardDrive, LayoutGrid, LogIn, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, useLocation, useOutlet } from "react-router-dom";
 import { Toaster } from "sonner";
@@ -28,6 +28,7 @@ function useScrolled(threshold = 8): boolean {
 const NAV = [
   { to: "/", label: "Device Manager", icon: Cpu, end: true },
   { to: "/devices", label: "All Devices", icon: LayoutGrid, end: false },
+  { to: "/environment", label: "Environment", icon: Activity, end: false },
 ];
 
 export function AppShell() {

@@ -5,6 +5,8 @@ import type { ServerConfig } from "./config";
 import { createTokenProvider } from "./github/auth";
 import { basicAuth, errorHandler, noStore, securityHeaders } from "./middleware";
 import { devicesRouter } from "./routes/devices";
+import { environmentRouter } from "./routes/environment";
+import { EnvironmentService } from "../shared/environment";
 import { DeviceService } from "../shared/deviceService";
 import { GitHubFileStore } from "../shared/githubStore";
 import { LocalFileStore } from "./storage/localStore";
@@ -26,13 +28,34 @@ export function createStore(config: ServerConfig, fetchFn: typeof fetch = fetch)
   });
 }
 
+/** Store for the Environment tab file; null when it cannot be located (no repo configured). */
+export function createEnvStore(config: ServerConfig, fetchFn: typeof fetch = fetch): DeviceFileStore | null {
+  const env = config.environment;
+  if (config.storage === "local") return env.localFilePath ? new LocalFileStore(env.localFilePath) : null;
+  const gh = config.github!;
+  if (!env.owner || !env.repo) return null;
+  return new GitHubFileStore({
+    owner: env.owner,
+    repo: env.repo,
+    branch: env.branch,
+    filePath: env.filePath,
+    apiUrl: gh.apiUrl,
+    tokens: createTokenProvider(gh.auth, gh.apiUrl, fetchFn),
+    committer: gh.committerName && gh.committerEmail ? { name: gh.committerName, email: gh.committerEmail } : undefined,
+    fetchFn,
+    readOnly: gh.auth.kind === "none",
+  });
+}
+
 export interface AppOptions {
   store: DeviceFileStore;
+  /** Environment tab file; the /api/environment endpoints answer 404 when absent. */
+  envStore?: DeviceFileStore | null;
   basicAuth?: { user: string; password: string };
   staticDir?: string;
 }
 
-export function createApp({ store, basicAuth: credentials, staticDir }: AppOptions): Express {
+export function createApp({ store, envStore, basicAuth: credentials, staticDir }: AppOptions): Express {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
@@ -40,7 +63,8 @@ export function createApp({ store, basicAuth: credentials, staticDir }: AppOptio
   if (credentials) app.use(basicAuth(credentials));
 
   const service = new DeviceService(store);
-  app.use("/api", noStore, express.json({ limit: "5mb" }), devicesRouter(service, store, Boolean(credentials)));
+  const envService = envStore ? new EnvironmentService(envStore) : null;
+  app.use("/api", noStore, express.json({ limit: "5mb" }), environmentRouter(envService), devicesRouter(service, store, Boolean(credentials)));
 
   // Production: serve the built frontend and fall back to index.html for client-side routes.
   if (staticDir && existsSync(path.join(staticDir, "index.html"))) {

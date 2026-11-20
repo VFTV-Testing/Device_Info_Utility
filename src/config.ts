@@ -23,6 +23,17 @@ export const GITHUB_TARGET: GitHubTarget = {
   filePath: (import.meta.env.VITE_GITHUB_FILE_PATH || "deviceInformation.json").replace(/^\/+/, ""),
 };
 
+/**
+ * Where Environment tab data (issues per robot port) is stored. Kept out of the device file
+ * so test automation never sees it. Defaults to environment/environmentStatus.json in this app's repo.
+ */
+export const ENV_TARGET: GitHubTarget = {
+  owner: import.meta.env.VITE_ENV_GITHUB_OWNER || import.meta.env.VITE_GITHUB_OWNER || "",
+  repo: import.meta.env.VITE_ENV_GITHUB_REPO || "Device_Info_Utility",
+  branch: import.meta.env.VITE_ENV_GITHUB_BRANCH || "main",
+  filePath: (import.meta.env.VITE_ENV_FILE_PATH || "environment/environmentStatus.json").replace(/^\/+/, ""),
+};
+
 export const GITHUB_API_URL = "https://api.github.com";
 
 /**

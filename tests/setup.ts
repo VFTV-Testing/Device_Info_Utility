@@ -23,8 +23,14 @@ if (typeof window !== "undefined") {
   })) as unknown as typeof window.matchMedia;
 }
 
-// Filters and the view-only choice are remembered per tab (sessionStorage); start every test clean.
+// Filters, views and the view-only choice are remembered in browser storage; start every test clean.
 import { afterEach } from "vitest";
 afterEach(() => {
   if (typeof sessionStorage !== "undefined") sessionStorage.clear();
+  if (typeof localStorage !== "undefined") localStorage.clear();
 });
+
+// UI tests render the whole app (animations included); under a full parallel run the first
+// render can take just over the default 1 s, so give async queries a little more room.
+import { configure } from "@testing-library/react";
+configure({ asyncUtilTimeout: 3000 });

@@ -23,6 +23,8 @@ export interface ServerConfig {
     committerEmail?: string;
   };
   local?: { filePath: string };
+  /** Environment tab file (issues per robot port). Same credentials as the device file. */
+  environment: { owner?: string; repo?: string; branch: string; filePath: string; localFilePath?: string };
   basicAuth?: { user: string; password: string };
   /** Directory with the built frontend (served in production). */
   staticDir?: string;
@@ -71,6 +73,12 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     port: Number(env.PORT) || 3001,
     storage,
     staticDir: env.STATIC_DIR?.trim() || undefined,
+    environment: {
+      owner: env.ENV_GITHUB_OWNER?.trim() || env.GITHUB_OWNER?.trim() || undefined,
+      repo: env.ENV_GITHUB_REPO?.trim() || env.GITHUB_REPO?.trim() || undefined,
+      branch: env.ENV_GITHUB_BRANCH?.trim() || env.GITHUB_BRANCH?.trim() || "main",
+      filePath: (env.ENV_FILE_PATH?.trim() || "environment/environmentStatus.json").replace(/^\/+/, ""),
+    },
   };
 
   if (storage === "github") {
@@ -101,6 +109,10 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     };
   } else {
     config.local = { filePath: path.resolve(env.LOCAL_DATA_FILE?.trim() || "deviceInformation.json") };
+    // Local mode keeps the environment file next to the local device file.
+    config.environment.localFilePath = path.resolve(
+      env.ENV_DATA_FILE?.trim() || path.join(path.dirname(config.local.filePath), "environmentStatus.json"),
+    );
   }
 
   const user = env.APP_BASIC_AUTH_USER?.trim();
