@@ -115,6 +115,15 @@ describe("EnvironmentService", () => {
     expect(store.writes).toHaveLength(0);
   });
 
+  it("stores OK as a plain comment without an issue type", async () => {
+    const store = new MemoryStore(null);
+    const result = await new EnvironmentService(store).addEntry(entry({ status: "ok", category: "ir", note: "Manual device" }));
+    expect(result.doc.ports["X117-AL"]!["PORT1"]![0]).not.toHaveProperty("category");
+    expect(store.writes[0]!.message.split("\n")[0]).toBe("Environment: X117-AL PORT1 → OK");
+    expect(validateEntryInput(entry({ status: "ok", category: undefined }))).toEqual([]);
+    expect(validateEntryInput(entry({ status: "issue", category: undefined }))).toContain("Choose an issue type");
+  });
+
   it("allows an OK update without a note", () => {
     expect(validateEntryInput(entry({ status: "ok", note: "" }))).toEqual([]);
   });

@@ -45,7 +45,7 @@ import { buildRows, COUNTRY_NAMES } from "../lib/deviceFilters";
 import { ApiError } from "../services/api";
 
 type PortState = EnvStatus | "none";
-type StatusFilter = "all" | "problems" | EnvStatus;
+type StatusFilter = "all" | EnvStatus;
 type View = "cards" | "table";
 
 interface PortRow {
@@ -70,6 +70,15 @@ const STATE_STYLE: Record<PortState, { label: string; tone: string; dot: string;
 };
 const PROBLEM: PortState[] = ["down", "issue"];
 const STATE_ORDER: Record<PortState, number> = { down: 0, issue: 1, ok: 2, none: 3 };
+
+function stateOf(entry?: { status: EnvStatus }): PortState {
+  return entry ? entry.status : "none";
+}
+
+/** Issue type label — only Issue / Down have one. */
+function issueType(entry?: { status: EnvStatus; category?: EnvCategory }): string | null {
+  return entry && entry.status !== "ok" && entry.category ? ENV_CATEGORY_LABELS[entry.category] : null;
+}
 const VIEW_KEY = "dim-env-view";
 
 function readView(): View {
@@ -174,7 +183,7 @@ export function EnvironmentPage() {
     for (const row of map.values()) {
       row.entries = doc ? entriesFor(doc, row.robot, row.port) : [];
       row.latest = latestEntry(row.entries);
-      row.state = row.latest?.status ?? "none";
+      row.state = stateOf(row.latest);
       row.pending = pending[pendingId(row.robot, row.port)];
     }
     return [...map.values()].sort((a, b) => naturalCompare(a.robot, b.robot) || naturalCompare(a.port, b.port));
@@ -201,14 +210,13 @@ export function EnvironmentPage() {
   const shown = useMemo(
     () =>
       inEnv.filter((p) => {
-        if (statusFilter === "problems" && !PROBLEM.includes(p.state)) return false;
-        if (statusFilter !== "all" && statusFilter !== "problems") {
+        if (statusFilter !== "all") {
           // "OK" also covers ports nobody has reported on.
-          if (statusFilter === "ok" ? !(p.state === "ok" || p.state === "none") : p.state !== statusFilter) return false;
+          if (statusFilter === "ok" ? PROBLEM.includes(p.state) : p.state !== statusFilter) return false;
         }
         if (!search) return true;
         const latest = p.latest;
-        return [p.robot, p.port, ...p.platforms, ...p.services, latest?.note ?? "", latest ? ENV_CATEGORY_LABELS[latest.category] : "", p.pending?.note ?? ""].some((v) =>
+        return [p.robot, p.port, ...p.platforms, ...p.services, latest?.note ?? "", issueType(latest) ?? "", p.pending?.note ?? ""].some((v) =>
           v.toLowerCase().includes(search),
         );
       }),
@@ -225,7 +233,6 @@ export function EnvironmentPage() {
 
   const tiles: { id: StatusFilter; label: string; value: number; tone: string }[] = [
     { id: "all", label: "All ports", value: inEnv.length, tone: "text-fg" },
-    { id: "problems", label: "With problems", value: tally.down + tally.issue, tone: "text-warning" },
     { id: "down", label: "Down", value: tally.down, tone: "text-danger" },
     { id: "issue", label: "Issue", value: tally.issue, tone: "text-warning" },
     { id: "ok", label: "OK / no report", value: tally.ok + tally.none, tone: "text-success" },
@@ -316,7 +323,7 @@ export function EnvironmentPage() {
         </div>
 
         {/* Status tiles double as the status filter */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5" role="radiogroup" aria-label="Status">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="radiogroup" aria-label="Status">
           {tiles.map((t) => (
             <button
               key={t.id}
@@ -385,7 +392,7 @@ export function EnvironmentPage() {
           <Card>
             <EmptyState
               icon={<Activity className="size-5" />}
-              title={statusFilter === "problems" || statusFilter === "down" || statusFilter === "issue" ? "No problems here" : "No ports match"}
+              title={statusFilter === "down" || statusFilter === "issue" ? "No problems here" : "No ports match"}
               description={statusFilter !== "all" ? "Nothing is reported for this selection." : "Try another environment or search."}
             />
           </Card>
@@ -468,7 +475,7 @@ export function EnvironmentPage() {
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
-                        {p.pending ? ENV_CATEGORY_LABELS[p.pending.category] : p.latest ? ENV_CATEGORY_LABELS[p.latest.category] : "—"}
+                        {(p.pending ? issueType(p.pending) : issueType(p.latest)) ?? "—"}
                       </td>
                       <td className="max-w-[420px] whitespace-pre-line px-3 py-2.5 text-[13px]">
                         {(p.pending ? p.pending.note : p.latest?.note) || <span className="text-fg-subtle">—</span>}
@@ -569,8 +576,10 @@ function PortItem({
       </div>
       {row.latest && (problem || row.latest.note) && (
         <div className="mt-2">
-          {problem && <span className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{ENV_CATEGORY_LABELS[row.latest.category]}</span>}
-          {row.latest.note && <p className={cn("mt-0.5 line-clamp-4 whitespace-pre-line text-[13px]", problem ? "text-fg" : "text-fg-muted")}>{row.latest.note}</p>}
+          {issueType(row.latest) && <span className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{issueType(row.latest)}</span>}
+          {row.latest.note && (
+            <p className="mt-0.5 line-clamp-4 whitespace-pre-line text-[13px] text-fg">{row.latest.note}</p>
+          )}
         </div>
       )}
       {pending && (
@@ -578,8 +587,8 @@ function PortItem({
           <div className="flex flex-wrap items-center gap-1.5">
             <PendingBadge />
             <ArrowRight className="size-3 text-fg-subtle" aria-hidden />
-            <StatusBadge state={pending.status} />
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{ENV_CATEGORY_LABELS[pending.category]}</span>
+            <StatusBadge state={stateOf(pending)} />
+            {issueType(pending) && <span className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{issueType(pending)}</span>}
           </div>
           {pending.note && <p className="mt-1 line-clamp-4 whitespace-pre-line text-[13px] text-fg">{pending.note}</p>}
         </div>
@@ -624,8 +633,8 @@ function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => vo
     setNote(from?.note ?? "");
   }, [row]);
 
-  const same = (a?: { status: EnvStatus; category: EnvCategory; note: string }) =>
-    Boolean(a && a.status === status && a.category === category && a.note === note.trim());
+  const same = (a?: { status: EnvStatus; category?: EnvCategory; note: string }) =>
+    Boolean(a && a.status === status && (status === "ok" || a.category === category) && a.note === note.trim());
   const unchanged = same(base);
   const needsNote = status !== "ok" && note.trim() === "";
 
@@ -633,7 +642,7 @@ function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => vo
     if (!row || !env) return;
     // Setting a port back to what is already saved simply drops its pending change.
     if (same(row.latest)) env.unstage(row.robot, row.port);
-    else env.stage({ robot: row.robot, port: row.port, status, category, note });
+    else env.stage({ robot: row.robot, port: row.port, status, ...(status !== "ok" ? { category } : {}), note });
     onClose();
   };
 
@@ -659,36 +668,39 @@ function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => vo
         <div>
           <FieldLabel>Status</FieldLabel>
           <div className="flex rounded-xl bg-surface-2 p-1" role="radiogroup" aria-label="Status">
-            {ENV_STATUSES.map((s) => (
+            {ENV_STATUSES.map((k) => (
               <button
-                key={s}
+                key={k}
                 type="button"
                 role="radio"
-                aria-checked={status === s}
-                onClick={() => setStatus(s)}
+                aria-checked={status === k}
+                onClick={() => setStatus(k)}
                 className={cn(
                   "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition",
-                  status === s ? cn(STATE_STYLE[s].tone, "shadow-card ring-1 ring-current/20") : "text-fg-muted hover:text-fg",
+                  status === k ? cn(STATE_STYLE[k].tone, "shadow-card ring-1 ring-current/20") : "text-fg-muted hover:text-fg",
                 )}
               >
-                {ENV_STATUS_LABELS[s]}
+                {ENV_STATUS_LABELS[k]}
               </button>
             ))}
           </div>
+          {status === "ok" && <p className="mt-1.5 text-xs text-fg-muted">OK = no problem. Add a comment if useful (manual device, VLAN, Wi-Fi…).</p>}
         </div>
-        <div>
-          <FieldLabel htmlFor="env-category">Issue type</FieldLabel>
-          <NativeSelect id="env-category" value={category} onChange={(e) => setCategory(e.target.value as EnvCategory)} className="[&_select]:h-10">
-            {ENV_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {ENV_CATEGORY_LABELS[c]}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
+        {status !== "ok" && (
+          <div>
+            <FieldLabel htmlFor="env-category">Issue type</FieldLabel>
+            <NativeSelect id="env-category" value={category} onChange={(e) => setCategory(e.target.value as EnvCategory)} className="[&_select]:h-10">
+              {ENV_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {ENV_CATEGORY_LABELS[c]}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+        )}
         <div>
           <FieldLabel htmlFor="env-note" hint={`${note.length} / ${MAX_NOTE_LENGTH}`}>
-            {status === "ok" ? "Note (optional)" : "What is the problem?"}
+            {status === "ok" ? "Comment (optional)" : "What is the problem?"}
           </FieldLabel>
           <textarea
             id="env-note"
@@ -696,7 +708,7 @@ function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => vo
             maxLength={MAX_NOTE_LENGTH}
             onChange={(e) => setNote(e.target.value)}
             rows={6}
-            placeholder={status === "ok" ? "e.g. Router rebooted, all channels working again" : "e.g. No internet on the box since 27/4 — MCAST live not working, OTT fine"}
+            placeholder={status === "ok" ? "e.g. Manual device · VLAN 202 · Wi-Fi connected to VCOE8" : "e.g. No internet on the box since 27/4 — MCAST live not working, OTT fine"}
             className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg transition placeholder:text-fg-subtle hover:border-border-strong focus:border-accent focus:outline-none focus:ring-4 focus:ring-ring"
           />
           {needsNote && <p className="mt-1 text-xs text-fg-muted">Describe the issue so others know what is wrong.</p>}
@@ -772,8 +784,8 @@ function ReviewDialog({ open, onClose, rows }: { open: boolean; onClose: () => v
                     </span>
                     <StatusBadge state={current?.state ?? "none"} />
                     <ArrowRight className="size-3 text-fg-subtle" aria-hidden />
-                    <StatusBadge state={p.status} />
-                    <span className="text-xs text-fg-muted">{ENV_CATEGORY_LABELS[p.category]}</span>
+                    <StatusBadge state={stateOf(p)} />
+                    {issueType(p) && <span className="text-xs text-fg-muted">{issueType(p)}</span>}
                   </div>
                   {p.note && <p className="mt-1 whitespace-pre-line text-[13px] text-fg">{p.note}</p>}
                 </div>
@@ -818,10 +830,10 @@ function HistoryDialog({ row, onClose }: { row: PortRow | null; onClose: () => v
 function HistoryItem({ entry, current }: { entry: EnvEntry; current: boolean }): ReactNode {
   return (
     <li className="relative">
-      <span className={cn("absolute -left-[26px] top-1.5 size-2.5 rounded-full ring-4 ring-surface", STATE_STYLE[entry.status].dot)} aria-hidden />
+      <span className={cn("absolute -left-[26px] top-1.5 size-2.5 rounded-full ring-4 ring-surface", STATE_STYLE[stateOf(entry)].dot)} aria-hidden />
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge state={entry.status} />
-        <span className="text-xs font-medium text-fg-muted">{ENV_CATEGORY_LABELS[entry.category]}</span>
+        <StatusBadge state={stateOf(entry)} />
+        {issueType(entry) && <span className="text-xs font-medium text-fg-muted">{issueType(entry)}</span>}
         {current && <Badge tone="accent">Current</Badge>}
         <span className="ml-auto text-xs text-fg-subtle" title={new Date(entry.at).toLocaleString()}>
           {new Date(entry.at).toLocaleDateString()} {formatTime(entry.at)}

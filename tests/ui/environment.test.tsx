@@ -116,11 +116,13 @@ describe("Environment tab", () => {
     expect(screen.getByRole("region", { name: "X109-CZ" })).toBeInTheDocument();
   });
 
-  it("shows only ports with problems from the status tiles", async () => {
+  it("filters by the Issue / Down tiles (no separate 'problems' tile)", async () => {
     setup();
     const user = userEvent.setup();
     await screen.findByRole("region", { name: "X117-AL" });
-    await user.click(within(screen.getByRole("radiogroup", { name: "Status" })).getByRole("radio", { name: /With problems/ }));
+    const tiles = within(screen.getByRole("radiogroup", { name: "Status" }));
+    expect(tiles.getAllByRole("radio").map((r) => r.textContent?.replace(/\d+$/, ""))).toEqual(["All ports", "Down", "Issue", "OK / no report"]);
+    await user.click(tiles.getByRole("radio", { name: /^Issue/ }));
     expect(screen.queryByText("No report")).not.toBeInTheDocument();
     expect(screen.getByText("2 of 3 ports")).toBeInTheDocument();
   });
@@ -152,7 +154,7 @@ describe("Environment tab", () => {
 
     await waitFor(() => expect(addEntries).toHaveBeenCalledTimes(1)); // one commit for both
     expect(addEntries.mock.calls[0]![0]).toEqual([
-      { robot: "X109-CZ", port: "PORT4", status: "ok", category: "replaced", note: "IR cable fixed" },
+      { robot: "X109-CZ", port: "PORT4", status: "ok", note: "IR cable fixed" }, // OK = comment, no issue type
       { robot: "X117-AL", port: "PORT2", status: "down", category: "bluetooth", note: "BT pairing failed after reboot" },
     ]);
     await waitFor(() => expect(screen.queryByRole("region", { name: "Pending updates" })).not.toBeInTheDocument());
@@ -189,6 +191,17 @@ describe("Environment tab", () => {
     expect(within(dialog).getByRole("button", { name: "Add to pending" })).toBeDisabled();
     await user.click(within(dialog).getByRole("radio", { name: "OK" }));
     expect(within(dialog).getByRole("button", { name: "Add to pending" })).toBeEnabled();
+  });
+
+  it("asks for an issue type only for Issue and Down", async () => {
+    setup();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Update X117-AL PORT2" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Issue type")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("radio", { name: "OK" }));
+    expect(within(dialog).queryByLabelText("Issue type")).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/Comment/)).toBeInTheDocument();
   });
 
   it("shows the full history, newest first", async () => {

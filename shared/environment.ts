@@ -41,7 +41,8 @@ export interface EnvEntry {
   /** GitHub login (or server user) who saved it. */
   by?: string;
   status: EnvStatus;
-  category: EnvCategory;
+  /** Issue type — only for Issue / Down. OK entries are a plain comment without one. */
+  category?: EnvCategory;
   note: string;
 }
 
@@ -65,7 +66,8 @@ export interface EnvEntryInput {
   robot: string;
   port: string;
   status: EnvStatus;
-  category: EnvCategory;
+  /** Required for Issue / Down; ignored for OK. */
+  category?: EnvCategory;
   note: string;
 }
 
@@ -84,7 +86,8 @@ function entryProblems(value: unknown, where: string): string[] {
   if (typeof value.at !== "string" || Number.isNaN(Date.parse(value.at))) problems.push(`${where}: "at" must be a date`);
   if (value.by !== undefined && typeof value.by !== "string") problems.push(`${where}: "by" must be text`);
   if (!ENV_STATUSES.includes(value.status as EnvStatus)) problems.push(`${where}: unknown status "${String(value.status)}"`);
-  if (!ENV_CATEGORIES.includes(value.category as EnvCategory)) problems.push(`${where}: unknown category "${String(value.category)}"`);
+  if (value.category !== undefined && !ENV_CATEGORIES.includes(value.category as EnvCategory)) problems.push(`${where}: unknown issue type "${String(value.category)}"`);
+  if (value.status !== "ok" && value.category === undefined) problems.push(`${where}: an issue needs an issue type`);
   if (typeof value.note !== "string") problems.push(`${where}: "note" must be text`);
   return problems;
 }
@@ -116,10 +119,11 @@ export function validateEntryInput(input: unknown): string[] {
   if (typeof input.robot !== "string" || !ROBOT_PATTERN.test(input.robot)) problems.push("A valid robot is required");
   if (typeof input.port !== "string" || !PORT_PATTERN.test(input.port)) problems.push("A valid device port is required (e.g. PORT1)");
   if (!ENV_STATUSES.includes(input.status as EnvStatus)) problems.push("Choose a status");
-  if (!ENV_CATEGORIES.includes(input.category as EnvCategory)) problems.push("Choose a category");
+  if (input.status !== "ok" && !ENV_CATEGORIES.includes(input.category as EnvCategory)) problems.push("Choose an issue type");
   if (typeof input.note !== "string") problems.push("The note must be text");
   else if (input.note.length > MAX_NOTE_LENGTH) problems.push(`The note is too long (max ${MAX_NOTE_LENGTH} characters)`);
   else if (input.status !== "ok" && input.note.trim() === "") problems.push("Describe the issue in the note");
+
   return problems;
 }
 
@@ -143,7 +147,8 @@ export function latestEntry(entries: EnvEntry[]): EnvEntry | undefined {
 }
 
 function describeChange(input: EnvEntryInput): string {
-  return `${input.robot} ${input.port} → ${ENV_STATUS_LABELS[input.status]} (${ENV_CATEGORY_LABELS[input.category]})`;
+  const type = input.status !== "ok" && input.category ? ` (${ENV_CATEGORY_LABELS[input.category]})` : "";
+  return `${input.robot} ${input.port} → ${ENV_STATUS_LABELS[input.status]}${type}`;
 }
 
 function commitMessage(inputs: EnvEntryInput[], actor?: string): string {
@@ -218,7 +223,14 @@ export class EnvironmentService {
       const at = new Date().toISOString();
       const entries = clean.map((c) => ({
         input: c,
-        entry: { at, ...(actor ? { by: actor } : {}), status: c.status, category: c.category, note: c.note.trim() } satisfies EnvEntry,
+        // OK is a plain comment: no issue type is stored for it.
+        entry: {
+          at,
+          ...(actor ? { by: actor } : {}),
+          status: c.status,
+          ...(c.status !== "ok" && c.category ? { category: c.category } : {}),
+          note: c.note.trim(),
+        } satisfies EnvEntry,
       }));
       const message = commitMessage(clean, actor);
 

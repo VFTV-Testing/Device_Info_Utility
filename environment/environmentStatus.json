@@ -1,4 +1,365 @@
 {
   "version": 1,
-  "ports": {}
+  "ports": {
+    "X102-GER": {
+      "PORT2": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "VCOE 8 LAN."
+        }
+      ]
+    },
+    "X104-GER": {
+      "PORT1": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "New LpDDR 4GB HW (HW change 10 Feb)."
+        }
+      ],
+      "PORT2": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "New LpDDR 4GB HW (HW change 10 Feb)."
+        }
+      ]
+    },
+    "X106-IE": {
+      "PORT1": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Manual device."
+        }
+      ],
+      "PORT2": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Manual device. Modem1 (HG659)."
+        }
+      ],
+      "PORT3": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Modem1 (HG658c)."
+        }
+      ],
+      "PORT4": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Modem1 (HG658c)."
+        }
+      ]
+    },
+    "X108-POR": {
+      "PORT1": [
+        {
+          "at": "2026-11-06T09:00:00.000Z",
+          "by": "Excel import",
+          "status": "down",
+          "category": "environment",
+          "note": "Sai 6/11/2026: robot dead, needs replacement."
+        }
+      ],
+      "PORT3": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Connected to Wi-Fi."
+        }
+      ],
+      "PORT4": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Connected to Wi-Fi."
+        }
+      ]
+    },
+    "X109-CZ": {
+      "PORT4": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Replaced GEN3 (2343419063) with ZTE GEN4_Mini box. IR cable in place."
+        }
+      ]
+    },
+    "X111-GRE": {
+      "PORT1": [
+        {
+          "at": "2026-04-27T09:00:00.000Z",
+          "by": "Excel import",
+          "status": "issue",
+          "category": "network",
+          "note": "Router 7 Port2 OK. Meha 27/4/2026: All MCAST channels: “Unable to play. Bring the router closer to the decoder and check the internet”. DTT, 3PA and OTT (VOD, recordings) working."
+        }
+      ],
+      "PORT2": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "issue",
+          "category": "network",
+          "note": "Router 4 Port1 OK. All MCAST channels: “Unable to play. Bring the router closer to the decoder and check the internet”. DTT, 3PA and OTT (VOD, recordings) working."
+        }
+      ],
+      "PORT3": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "issue",
+          "category": "network",
+          "note": "Router 5 Port2 OK. All MCAST channels: “Unable to play. Bring the router closer to the decoder and check the internet”. DTT, 3PA and OTT (VOD, recordings) working."
+        }
+      ],
+      "PORT4": [
+        {
+          "at": "2026-04-27T09:00:00.000Z",
+          "by": "Excel import",
+          "status": "down",
+          "category": "network",
+          "note": "Router 3 Port2 OK. 27/4/2026: no internet on the box."
+        }
+      ]
+    },
+    "X112-ES": {
+      "PORT1": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Manual device."
+        }
+      ]
+    },
+    "X113-ES": {
+      "PORT4": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Manual device."
+        }
+      ]
+    },
+    "X114-GER": {
+      "PORT1": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "VLAN 202."
+        }
+      ],
+      "PORT2": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Device replaced with FUT2 device (12 May). VLAN 202."
+        }
+      ],
+      "PORT3": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Ritesh 21/8/2025: device replaced. VLAN 202."
+        }
+      ],
+      "PORT4": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "VLAN 202."
+        }
+      ]
+    },
+    "X115-GRE": {
+      "PORT1": [
+        {
+          "at": "2026-04-27T09:00:00.000Z",
+          "by": "Excel import",
+          "status": "down",
+          "category": "network",
+          "note": "Router 1 Port1 OK. 27/4/2026: no internet on the box."
+        },
+        {
+          "at": "2026-04-28T09:00:00.000Z",
+          "by": "Excel import",
+          "status": "issue",
+          "category": "network",
+          "note": "Sai 28/4/2026: network recovered after router reboot via panel. MCAST live not working; OTT, VOD and 3PA working."
+        }
+      ],
+      "PORT2": [
+        {
+          "at": "2026-04-27T09:00:00.000Z",
+          "by": "Excel import",
+          "status": "down",
+          "category": "network",
+          "note": "Router 3 Port1 OK. 27/4/2026: no internet on the box."
+        },
+        {
+          "at": "2026-04-28T09:00:00.000Z",
+          "by": "Excel import",
+          "status": "issue",
+          "category": "network",
+          "note": "Sai 28/4/2026: network recovered after router reboot via panel. MCAST live not working; OTT, VOD and 3PA working."
+        }
+      ],
+      "PORT3": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "issue",
+          "category": "network",
+          "note": "3PA device. Router 5 Port1 OK. All MCAST channels: “Unable to play. Bring the router closer to the decoder and check the internet”. 3PA and OTT (VOD, recordings) working."
+        }
+      ],
+      "PORT4": [
+        {
+          "at": "2026-04-27T09:00:00.000Z",
+          "by": "Excel import",
+          "status": "issue",
+          "category": "network",
+          "note": "Router 2 Port3 OK. Meha 27/4/2026: no network on the device. All MCAST channels: “Unable to play. Bring the router closer to the decoder and check the internet”. DTT, 3PA and OTT (VOD, recordings) working."
+        }
+      ]
+    },
+    "X116-GER": {
+      "PORT3": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "New LpDDR 4GB HW (HW change 10 Feb)."
+        }
+      ],
+      "PORT4": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "New LpDDR 4GB HW (HW change 10 Feb)."
+        }
+      ]
+    },
+    "X117-AL": {
+      "PORT1": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "issue",
+          "category": "ir",
+          "note": "No IR backup yet."
+        }
+      ],
+      "PORT3": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "issue",
+          "category": "ir",
+          "note": "No IR backup yet."
+        }
+      ]
+    },
+    "X118-CZ": {
+      "PORT4": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "issue",
+          "category": "ir",
+          "note": "Replaced AVSB (2393607013) with ZTE GEN4_Mini box. IR cable not in place."
+        }
+      ]
+    },
+    "X119-GER": {
+      "PORT1": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Wi-Fi connected to VCOE8."
+        }
+      ],
+      "PORT2": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Wi-Fi connected to VCOE8."
+        }
+      ],
+      "PORT3": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Wi-Fi connected to VCOE8."
+        }
+      ],
+      "PORT4": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "Wi-Fi connected to VCOE16."
+        }
+      ]
+    },
+    "X120-POR": {
+      "PORT1": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "On MCAST playback group."
+        }
+      ],
+      "PORT2": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "On MCAST playback group. New LpDDR 4GB HW (HW change 26 Feb)."
+        }
+      ],
+      "PORT3": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "On MCAST playback group."
+        }
+      ],
+      "PORT4": [
+        {
+          "at": "2026-11-20T12:00:00.000Z",
+          "by": "Excel import",
+          "status": "ok",
+          "note": "On MCAST playback group. Upgraded to R58. New LpDDR 4GB HW (HW change 26 Feb)."
+        }
+      ]
+    }
+  }
 }
