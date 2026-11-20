@@ -83,7 +83,10 @@ export function EnvironmentProvider({ client, children }: { client: EnvApi; chil
   }, [client]);
 
   const stage = useCallback((input: EnvEntryInput) => {
-    setPending((p) => ({ ...p, [pendingId(input.robot, input.port)]: { ...input, note: input.note.trim() } }));
+    const clean: EnvEntryInput = { ...input };
+    if (clean.note !== undefined) clean.note = clean.note.trim();
+    if (clean.setup !== undefined) clean.setup = clean.setup.trim();
+    setPending((p) => ({ ...p, [pendingId(input.robot, input.port)]: clean }));
   }, []);
 
   const unstage = useCallback((robot: string, port: string) => {

@@ -32,6 +32,7 @@ const at = (day: number) => new Date(Date.UTC(2026, 3, day, 9)).toISOString();
 function makeDoc(): EnvironmentDoc {
   return {
     version: 1,
+    setup: { "X117-AL": { PORT1: [{ at: at(1), by: "meha", note: "Router 3 Port2 · VLAN 202" }] } },
     ports: {
       "X117-AL": { PORT1: [{ at: at(20), by: "meha", status: "issue", category: "ir", note: "no IR backup yet" }] },
       "X109-CZ": {
@@ -47,9 +48,16 @@ function makeDoc(): EnvironmentDoc {
 function setup({ readOnly = false } = {}) {
   const doc = makeDoc();
   const addEntries = vi.fn(async (inputs: EnvEntryInput[]): Promise<EnvWriteResult> => {
-    for (const input of inputs) {
-      const list = (doc.ports[input.robot] ??= {})[input.port] ?? [];
-      doc.ports[input.robot]![input.port] = [...list, { at: new Date().toISOString(), by: "me", ...input }];
+    const now = new Date().toISOString();
+    for (const { robot, port, status, category, note, setup } of inputs) {
+      if (status) {
+        const list = (doc.ports[robot] ??= {})[port] ?? [];
+        doc.ports[robot]![port] = [...list, { at: now, by: "me", status, ...(category ? { category } : {}), note: note ?? "" }];
+      }
+      if (setup !== undefined) {
+        const bySetup = ((doc.setup ??= {})[robot] ??= {});
+        bySetup[port] = [...(bySetup[port] ?? []), { at: now, by: "me", note: setup }];
+      }
     }
     return { doc: structuredClone(doc), version: "v2", fetchedAt: new Date().toISOString(), commit: { sha: "abcdef1234567", message: "Environment" } };
   });
@@ -75,7 +83,7 @@ async function stageUpdate(user: ReturnType<typeof userEvent.setup>, name: strin
   await user.click(await screen.findByRole("button", { name: `Update ${name}` }));
   const dialog = await screen.findByRole("dialog");
   await user.click(within(dialog).getByRole("radio", { name: status }));
-  const box = within(dialog).getByRole("textbox");
+  const box = within(dialog).getByLabelText(/Comment|What is the problem/);
   await user.clear(box);
   if (note) await user.type(box, note);
   await user.click(within(dialog).getByRole("button", { name: /to pending|Update pending/ }));
@@ -188,9 +196,12 @@ describe("Environment tab", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Update X117-AL PORT2" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("button", { name: "Add to pending" })).toBeDisabled();
-    await user.click(within(dialog).getByRole("radio", { name: "OK" }));
-    expect(within(dialog).getByRole("button", { name: "Add to pending" })).toBeEnabled();
+    const add = () => within(dialog).getByRole("button", { name: "Add to pending" });
+    expect(add()).toBeDisabled(); // nothing changed yet
+    await user.click(within(dialog).getByRole("radio", { name: "Issue" }));
+    expect(add()).toBeDisabled(); // an issue needs a description
+    await user.type(within(dialog).getByLabelText(/What is the problem/), "Remote not pairing");
+    expect(add()).toBeEnabled();
   });
 
   it("asks for an issue type only for Issue and Down", async () => {
@@ -198,10 +209,39 @@ describe("Environment tab", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Update X117-AL PORT2" }));
     const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByLabelText("Issue type")).not.toBeInTheDocument(); // starts as OK
+    await user.click(within(dialog).getByRole("radio", { name: "Issue" }));
     expect(within(dialog).getByLabelText("Issue type")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("radio", { name: "OK" }));
     expect(within(dialog).queryByLabelText("Issue type")).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText(/Comment/)).toBeInTheDocument();
+  });
+
+  it("always shows setup info next to the latest status", async () => {
+    setup();
+    const al = await screen.findByRole("region", { name: "X117-AL" });
+    expect(within(al).getByText("Router 3 Port2 · VLAN 202")).toBeInTheDocument();
+    expect(within(al).getByText("no IR backup yet")).toBeInTheDocument();
+  });
+
+  it("can change only the setup info, keeping the status as it is", async () => {
+    const { addEntries } = setup();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Update X117-AL PORT1" }));
+    const dialog = await screen.findByRole("dialog");
+    const field = within(dialog).getByLabelText(/Setup info/);
+    expect(field).toHaveValue("Router 3 Port2 · VLAN 202");
+    await user.clear(field);
+    await user.type(field, "Router 4 Port1 · VLAN 202");
+    await user.click(within(dialog).getByRole("button", { name: "Add to pending" }));
+
+    await user.click(screen.getByRole("button", { name: "Push 1 update" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Push 1 update" }));
+    await waitFor(() => expect(addEntries).toHaveBeenCalledTimes(1));
+    expect(addEntries.mock.calls[0]![0]).toEqual([{ robot: "X117-AL", port: "PORT1", setup: "Router 4 Port1 · VLAN 202" }]);
+    const al = screen.getByRole("region", { name: "X117-AL" });
+    expect(await within(al).findByText("Router 4 Port1 · VLAN 202")).toBeInTheDocument();
+    expect(within(al).getByText("no IR backup yet")).toBeInTheDocument(); // status untouched
   });
 
   it("shows the full history, newest first", async () => {
@@ -211,6 +251,7 @@ describe("Environment tab", () => {
     const dialog = await screen.findByRole("dialog");
     const items = within(dialog).getAllByRole("listitem");
     expect(items).toHaveLength(2);
+    // (setup changes appear in the same timeline — covered by the setup tests)
     expect(items[0]).toHaveTextContent("Replaced GEN3 with ZTE");
     expect(items[0]).toHaveTextContent("Current");
     expect(items[1]).toHaveTextContent("GEN3 box dead");

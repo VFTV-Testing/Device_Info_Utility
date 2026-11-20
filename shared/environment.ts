@@ -34,6 +34,7 @@ export const ENV_CATEGORY_LABELS: Record<EnvCategory, string> = {
 };
 
 export const MAX_NOTE_LENGTH = 4000;
+export const MAX_SETUP_LENGTH = 1000;
 
 export interface EnvEntry {
   /** ISO time the entry was saved (set by the service, not the client). */
@@ -46,9 +47,23 @@ export interface EnvEntry {
   note: string;
 }
 
+/**
+ * Setup info: permanent facts about a port (router/port, VLAN, modem, Wi-Fi, manual device,
+ * HW change…). Kept apart from the status so it stays visible whatever the status is.
+ * Also append-only; the last entry is the current setup ("" = cleared).
+ */
+export interface SetupEntry {
+  at: string;
+  by?: string;
+  note: string;
+}
+
 export interface EnvironmentDoc {
   version: 1;
+  /** Status history per robot → port. */
   ports: Record<string, Record<string, EnvEntry[]>>;
+  /** Setup-info history per robot → port. */
+  setup?: Record<string, Record<string, SetupEntry[]>>;
 }
 
 export interface EnvSnapshot {
@@ -62,13 +77,20 @@ export interface EnvWriteResult extends EnvSnapshot {
   commit: CommitInfo;
 }
 
+/**
+ * One port's update. It can change the status, the setup info, or both:
+ * leave `status` out to change only the setup, leave `setup` out to change only the status.
+ */
 export interface EnvEntryInput {
   robot: string;
   port: string;
-  status: EnvStatus;
+  status?: EnvStatus;
   /** Required for Issue / Down; ignored for OK. */
   category?: EnvCategory;
-  note: string;
+  /** Status note (required for Issue / Down). */
+  note?: string;
+  /** New setup info for the port ("" clears it). */
+  setup?: string;
 }
 
 export const EMPTY_ENV_DOC: EnvironmentDoc = { version: 1, ports: {} };
@@ -92,11 +114,34 @@ function entryProblems(value: unknown, where: string): string[] {
   return problems;
 }
 
+function setupProblems(value: unknown, where: string): string[] {
+  if (!isObject(value)) return [`${where}: setup entry must be an object`];
+  const problems: string[] = [];
+  if (typeof value.at !== "string" || Number.isNaN(Date.parse(value.at))) problems.push(`${where}: "at" must be a date`);
+  if (value.by !== undefined && typeof value.by !== "string") problems.push(`${where}: "by" must be text`);
+  if (typeof value.note !== "string") problems.push(`${where}: setup "note" must be text`);
+  return problems;
+}
+
 export function validateEnvDoc(value: unknown): { ok: true; doc: EnvironmentDoc } | { ok: false; errors: string[] } {
   if (!isObject(value)) return { ok: false, errors: ["The environment file must contain a JSON object"] };
   if (value.version !== 1) return { ok: false, errors: [`Unsupported environment file version "${String(value.version)}"`] };
   if (!isObject(value.ports)) return { ok: false, errors: ['"ports" must be an object'] };
   const errors: string[] = [];
+  if (value.setup !== undefined) {
+    if (!isObject(value.setup)) errors.push('"setup" must be an object');
+    else
+      for (const [robot, ports] of Object.entries(value.setup)) {
+        if (!isObject(ports)) {
+          errors.push(`setup ${robot}: must map ports to entries`);
+          continue;
+        }
+        for (const [port, entries] of Object.entries(ports)) {
+          if (!Array.isArray(entries)) errors.push(`setup ${robot} ${port}: entries must be a list`);
+          else entries.forEach((entry, i) => errors.push(...setupProblems(entry, `setup ${robot} ${port} #${i + 1}`)));
+        }
+      }
+  }
   for (const [robot, ports] of Object.entries(value.ports)) {
     if (!isObject(ports)) {
       errors.push(`${robot}: must map ports to entries`);
@@ -118,24 +163,47 @@ export function validateEntryInput(input: unknown): string[] {
   const problems: string[] = [];
   if (typeof input.robot !== "string" || !ROBOT_PATTERN.test(input.robot)) problems.push("A valid robot is required");
   if (typeof input.port !== "string" || !PORT_PATTERN.test(input.port)) problems.push("A valid device port is required (e.g. PORT1)");
-  if (!ENV_STATUSES.includes(input.status as EnvStatus)) problems.push("Choose a status");
-  if (input.status !== "ok" && !ENV_CATEGORIES.includes(input.category as EnvCategory)) problems.push("Choose an issue type");
-  if (typeof input.note !== "string") problems.push("The note must be text");
-  else if (input.note.length > MAX_NOTE_LENGTH) problems.push(`The note is too long (max ${MAX_NOTE_LENGTH} characters)`);
-  else if (input.status !== "ok" && input.note.trim() === "") problems.push("Describe the issue in the note");
-
+  if (input.status === undefined && input.setup === undefined) problems.push("Nothing to update");
+  if (input.status !== undefined) {
+    if (!ENV_STATUSES.includes(input.status as EnvStatus)) problems.push("Choose a status");
+    if (input.status !== "ok" && !ENV_CATEGORIES.includes(input.category as EnvCategory)) problems.push("Choose an issue type");
+    const note = input.note ?? "";
+    if (typeof note !== "string") problems.push("The note must be text");
+    else if (note.length > MAX_NOTE_LENGTH) problems.push(`The note is too long (max ${MAX_NOTE_LENGTH} characters)`);
+    else if (input.status !== "ok" && note.trim() === "") problems.push("Describe the issue in the note");
+  }
+  if (input.setup !== undefined) {
+    if (typeof input.setup !== "string") problems.push("Setup info must be text");
+    else if (input.setup.length > MAX_SETUP_LENGTH) problems.push(`Setup info is too long (max ${MAX_SETUP_LENGTH} characters)`);
+  }
   return problems;
+}
+
+function sortNested<T>(map: Record<string, Record<string, T>>): Record<string, Record<string, T>> {
+  const out: Record<string, Record<string, T>> = {};
+  for (const robot of Object.keys(map).sort(naturalCompare)) {
+    const byPort = map[robot]!;
+    out[robot] = {};
+    for (const port of Object.keys(byPort).sort(naturalCompare)) out[robot]![port] = byPort[port]!;
+  }
+  return out;
 }
 
 /** Stable, readable JSON: robots and ports in natural order, 2-space indent, trailing newline. */
 export function serializeEnvDoc(doc: EnvironmentDoc): string {
-  const ports: EnvironmentDoc["ports"] = {};
-  for (const robot of Object.keys(doc.ports).sort(naturalCompare)) {
-    const byPort = doc.ports[robot]!;
-    ports[robot] = {};
-    for (const port of Object.keys(byPort).sort(naturalCompare)) ports[robot]![port] = byPort[port]!;
-  }
-  return `${JSON.stringify({ version: 1, ports }, null, 2)}\n`;
+  const out: EnvironmentDoc = { version: 1, ports: sortNested(doc.ports) };
+  if (doc.setup && Object.keys(doc.setup).length) out.setup = sortNested(doc.setup);
+  return `${JSON.stringify(out, null, 2)}\n`;
+}
+
+export function setupFor(doc: EnvironmentDoc, robot: string, port: string): SetupEntry[] {
+  return doc.setup?.[robot]?.[port] ?? [];
+}
+
+/** Current setup info ("" when none). */
+export function currentSetup(doc: EnvironmentDoc, robot: string, port: string): string {
+  const list = setupFor(doc, robot, port);
+  return list[list.length - 1]?.note ?? "";
 }
 
 export function entriesFor(doc: EnvironmentDoc, robot: string, port: string): EnvEntry[] {
@@ -147,8 +215,20 @@ export function latestEntry(entries: EnvEntry[]): EnvEntry | undefined {
 }
 
 function describeChange(input: EnvEntryInput): string {
-  const type = input.status !== "ok" && input.category ? ` (${ENV_CATEGORY_LABELS[input.category]})` : "";
-  return `${input.robot} ${input.port} → ${ENV_STATUS_LABELS[input.status]}${type}`;
+  const parts: string[] = [];
+  if (input.status) {
+    const type = input.status !== "ok" && input.category ? ` (${ENV_CATEGORY_LABELS[input.category]})` : "";
+    parts.push(`→ ${ENV_STATUS_LABELS[input.status]}${type}`);
+  }
+  if (input.setup !== undefined) parts.push(input.setup.trim() ? "setup updated" : "setup cleared");
+  return `${input.robot} ${input.port} ${parts.join(", ")}`;
+}
+
+function detail(input: EnvEntryInput): string {
+  const parts: string[] = [];
+  if (input.status && input.note?.trim()) parts.push(input.note.trim().replace(/\s+/g, " "));
+  if (input.setup?.trim()) parts.push(`Setup: ${input.setup.trim().replace(/\s+/g, " ")}`);
+  return parts.join(" | ");
 }
 
 function commitMessage(inputs: EnvEntryInput[], actor?: string): string {
@@ -156,10 +236,10 @@ function commitMessage(inputs: EnvEntryInput[], actor?: string): string {
   let body: string[];
   if (inputs.length === 1) {
     title = `Environment: ${describeChange(inputs[0]!)}`;
-    body = [inputs[0]!.note.trim() || "(no note)"];
+    body = [detail(inputs[0]!) || "(no note)"];
   } else {
     title = `Environment: ${inputs.length} updates`;
-    body = inputs.map((i) => `- ${describeChange(i)}${i.note.trim() ? `: ${i.note.trim().replace(/\s+/g, " ")}` : ""}`);
+    body = inputs.map((i) => `- ${describeChange(i)}${detail(i) ? `: ${detail(i)}` : ""}`);
   }
   if (actor) body.push("", `Requested by: ${actor} (via Device Information Manager)`);
   return `${title}\n\n${body.join("\n")}`;
@@ -221,28 +301,34 @@ export class EnvironmentService {
       const ids = clean.map((c) => `${c.robot}|${c.port}`);
       if (new Set(ids).size !== ids.length) throw new AppError(400, "VALIDATION_FAILED", "Each port can only be updated once per save.");
       const at = new Date().toISOString();
-      const entries = clean.map((c) => ({
-        input: c,
-        // OK is a plain comment: no issue type is stored for it.
-        entry: {
-          at,
-          ...(actor ? { by: actor } : {}),
-          status: c.status,
-          ...(c.status !== "ok" && c.category ? { category: c.category } : {}),
-          note: c.note.trim(),
-        } satisfies EnvEntry,
-      }));
+      const who = actor ? { by: actor } : {};
       const message = commitMessage(clean, actor);
 
       for (let attempt = 1; ; attempt++) {
         const latest = await this.load();
         const ports = { ...latest.doc.ports };
-        for (const { input, entry } of entries) {
-          const robotPorts = { ...(ports[input.robot] ?? {}) };
-          robotPorts[input.port] = [...(robotPorts[input.port] ?? []), entry];
-          ports[input.robot] = robotPorts;
+        const setup = { ...(latest.doc.setup ?? {}) };
+        for (const c of clean) {
+          if (c.status) {
+            // OK is a plain comment: no issue type is stored for it.
+            const entry: EnvEntry = {
+              at,
+              ...who,
+              status: c.status,
+              ...(c.status !== "ok" && c.category ? { category: c.category } : {}),
+              note: (c.note ?? "").trim(),
+            };
+            const robotPorts = { ...(ports[c.robot] ?? {}) };
+            robotPorts[c.port] = [...(robotPorts[c.port] ?? []), entry];
+            ports[c.robot] = robotPorts;
+          }
+          if (c.setup !== undefined) {
+            const robotSetup = { ...(setup[c.robot] ?? {}) };
+            robotSetup[c.port] = [...(robotSetup[c.port] ?? []), { at, ...who, note: c.setup.trim() }];
+            setup[c.robot] = robotSetup;
+          }
         }
-        const doc: EnvironmentDoc = { version: 1, ports };
+        const doc: EnvironmentDoc = { version: 1, ports, ...(Object.keys(setup).length ? { setup } : {}) };
         try {
           const outcome = await this.store.write(serializeEnvDoc(doc), { message, expectedVersion: latest.version });
           return {

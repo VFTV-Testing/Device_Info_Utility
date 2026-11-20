@@ -13,11 +13,12 @@ import {
   Rows3,
   Search,
   ServerCrash,
+  Settings2,
   Undo2,
   UploadCloud,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { naturalCompare } from "../../shared/deviceId";
 import {
@@ -28,10 +29,13 @@ import {
   entriesFor,
   latestEntry,
   MAX_NOTE_LENGTH,
+  MAX_SETUP_LENGTH,
+  setupFor,
   type EnvCategory,
   type EnvEntry,
   type EnvEntryInput,
   type EnvStatus,
+  type SetupEntry,
 } from "../../shared/environment";
 import { DataStateGate } from "../components/common/DataStateGate";
 import { commitToast } from "../components/device/RecordForm";
@@ -55,9 +59,13 @@ interface PortRow {
   env: string;
   platforms: string[];
   services: string[];
+  /** Status history (oldest first) and the current status. */
   entries: EnvEntry[];
   latest?: EnvEntry;
   state: PortState;
+  /** Setup-info history and the current setup ("" = none). */
+  setupEntries: SetupEntry[];
+  setup: string;
   /** An update collected but not pushed yet. */
   pending?: EnvEntryInput;
 }
@@ -70,15 +78,6 @@ const STATE_STYLE: Record<PortState, { label: string; tone: string; dot: string;
 };
 const PROBLEM: PortState[] = ["down", "issue"];
 const STATE_ORDER: Record<PortState, number> = { down: 0, issue: 1, ok: 2, none: 3 };
-
-function stateOf(entry?: { status: EnvStatus }): PortState {
-  return entry ? entry.status : "none";
-}
-
-/** Issue type label — only Issue / Down have one. */
-function issueType(entry?: { status: EnvStatus; category?: EnvCategory }): string | null {
-  return entry && entry.status !== "ok" && entry.category ? ENV_CATEGORY_LABELS[entry.category] : null;
-}
 const VIEW_KEY = "dim-env-view";
 
 function readView(): View {
@@ -87,6 +86,16 @@ function readView(): View {
   } catch {
     return "cards";
   }
+}
+
+/** Issue type label — only Issue / Down have one. */
+function issueType(entry?: { status?: EnvStatus; category?: EnvCategory }): string | null {
+  return entry?.status && entry.status !== "ok" && entry.category ? ENV_CATEGORY_LABELS[entry.category] : null;
+}
+
+/** Setup info as shown: the pending value when there is one, else the saved one. */
+function shownSetup(row: PortRow): string {
+  return row.pending?.setup !== undefined ? row.pending.setup : row.setup;
 }
 
 function StatusBadge({ state, className }: { state: PortState; className?: string }) {
@@ -107,7 +116,23 @@ function PendingBadge() {
   );
 }
 
-function Updated({ entry }: { entry?: EnvEntry }) {
+/** The always-visible setup line (router/port, VLAN, modem, Wi-Fi…). */
+function SetupLine({ row, className }: { row: PortRow; className?: string }) {
+  const text = shownSetup(row);
+  const pending = row.pending?.setup !== undefined && row.pending.setup !== row.setup;
+  if (!text && !pending) return null;
+  return (
+    <p className={cn("flex items-start gap-1.5 text-xs", pending ? "font-medium text-accent" : "text-fg-muted", className)} title="Setup info">
+      <Settings2 className="mt-px size-3.5 shrink-0" aria-hidden />
+      <span className="min-w-0 whitespace-pre-line">
+        {text || <em>Setup cleared</em>}
+        {pending && <span className="ml-1 text-[11px]">(pending)</span>}
+      </span>
+    </p>
+  );
+}
+
+function Updated({ entry }: { entry?: { at: string; by?: string } }) {
   if (!entry) return <span className="text-fg-subtle">Never updated</span>;
   return (
     <span title={new Date(entry.at).toLocaleString()}>
@@ -158,32 +183,42 @@ export function EnvironmentPage() {
 
   /** Every robot port from the device file, plus any port that only exists in the environment file. */
   const ports = useMemo<PortRow[]>(() => {
+    const blank = (robot: string, port: string, envCode: string): PortRow => ({
+      robot,
+      port,
+      env: envCode,
+      platforms: [],
+      services: [],
+      entries: [],
+      state: "none",
+      setupEntries: [],
+      setup: "",
+    });
     const map = new Map<string, PortRow>();
     for (const row of buildRows(snapshot?.data ?? {})) {
       if (row.device === "—") continue;
       const id = pendingId(row.device, row.port);
-      const existing = map.get(id);
-      if (existing) {
-        if (!existing.platforms.includes(row.Hardware)) existing.platforms.push(row.Hardware);
-        if (!existing.services.includes(row.service)) existing.services.push(row.service);
-      } else {
-        map.set(id, { robot: row.device, port: row.port, env: row.country, platforms: [row.Hardware], services: [row.service], entries: [], state: "none" });
-      }
+      const existing = map.get(id) ?? blank(row.device, row.port, row.country);
+      if (!existing.platforms.includes(row.Hardware)) existing.platforms.push(row.Hardware);
+      if (!existing.services.includes(row.service)) existing.services.push(row.service);
+      map.set(id, existing);
     }
-    const extra = [...Object.entries(doc?.ports ?? {}).flatMap(([robot, byPort]) => Object.keys(byPort).map((port) => [robot, port] as const))];
+    const extra = [doc?.ports ?? {}, doc?.setup ?? {}].flatMap((m) => Object.entries(m).flatMap(([robot, byPort]) => Object.keys(byPort).map((port) => [robot, port] as const)));
     for (const p of Object.values(pending)) extra.push([p.robot, p.port]);
     for (const [robot, port] of extra) {
       const id = pendingId(robot, port);
       if (!map.has(id)) {
         // A robot whose other ports are known keeps its environment.
         const sibling = [...map.values()].find((p) => p.robot === robot);
-        map.set(id, { robot, port, env: sibling?.env ?? "—", platforms: [], services: [], entries: [], state: "none" });
+        map.set(id, blank(robot, port, sibling?.env ?? "—"));
       }
     }
     for (const row of map.values()) {
       row.entries = doc ? entriesFor(doc, row.robot, row.port) : [];
       row.latest = latestEntry(row.entries);
-      row.state = stateOf(row.latest);
+      row.state = row.latest?.status ?? "none";
+      row.setupEntries = doc ? setupFor(doc, row.robot, row.port) : [];
+      row.setup = row.setupEntries[row.setupEntries.length - 1]?.note ?? "";
       row.pending = pending[pendingId(row.robot, row.port)];
     }
     return [...map.values()].sort((a, b) => naturalCompare(a.robot, b.robot) || naturalCompare(a.port, b.port));
@@ -215,8 +250,7 @@ export function EnvironmentPage() {
           if (statusFilter === "ok" ? PROBLEM.includes(p.state) : p.state !== statusFilter) return false;
         }
         if (!search) return true;
-        const latest = p.latest;
-        return [p.robot, p.port, ...p.platforms, ...p.services, latest?.note ?? "", issueType(latest) ?? "", p.pending?.note ?? ""].some((v) =>
+        return [p.robot, p.port, ...p.platforms, ...p.services, p.latest?.note ?? "", issueType(p.latest) ?? "", shownSetup(p), p.pending?.note ?? ""].some((v) =>
           v.toLowerCase().includes(search),
         );
       }),
@@ -247,7 +281,7 @@ export function EnvironmentPage() {
           <div>
             <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Environment</h2>
             <p className="mt-1 text-sm text-fg-muted">
-              Problems per robot port — setup, Bluetooth, box, network and more. Every update is kept in the history.
+              Setup and current status per robot port — setup, Bluetooth, box, network and more. Every change is kept in the history.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -348,7 +382,7 @@ export function EnvironmentPage() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search robots, ports, notes…"
+              placeholder="Search robots, ports, setup, notes…"
               aria-label="Search environment"
               className="h-9 rounded-full pl-10"
             />
@@ -444,10 +478,10 @@ export function EnvironmentPage() {
         ) : (
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1000px] text-sm">
+              <table className="w-full min-w-[1150px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-fg-muted">
-                    {["Robot", "Device port", "Platform", "Stream type", "Status", "Issue type", "Issues", "Updated", ""].map((h) => (
+                    {["Robot", "Device port", "Platform", "Stream type", "Setup", "Status", "Issue type", "Issues", "Updated", ""].map((h) => (
                       <th key={h} scope="col" className="px-3 py-3 font-medium">
                         {h}
                       </th>
@@ -455,51 +489,55 @@ export function EnvironmentPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((p) => (
-                    <tr
-                      key={pendingId(p.robot, p.port)}
-                      className={cn("border-b border-border align-top last:border-0 hover:bg-accent-soft/40", p.pending && "bg-accent-soft/50")}
-                    >
-                      <td className="whitespace-nowrap px-3 py-2.5 font-semibold">{p.robot}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{p.port}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5">{p.platforms.join(", ") || "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{p.services.join(", ") || "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5">
-                        <div className="flex flex-col items-start gap-1">
-                          <StatusBadge state={p.state} />
-                          {p.pending && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
-                              <ArrowRight className="size-3" aria-hidden /> {ENV_STATUS_LABELS[p.pending.status]} (pending)
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
-                        {(p.pending ? issueType(p.pending) : issueType(p.latest)) ?? "—"}
-                      </td>
-                      <td className="max-w-[420px] whitespace-pre-line px-3 py-2.5 text-[13px]">
-                        {(p.pending ? p.pending.note : p.latest?.note) || <span className="text-fg-subtle">—</span>}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-fg-muted">{p.pending ? <PendingBadge /> : <Updated entry={p.latest} />}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-right">
-                        <div className="inline-flex gap-1">
-                          {p.entries.length > 0 && (
-                            <Button size="sm" variant="ghost" onClick={() => setViewingHistory(p)} aria-label={`History of ${p.robot} ${p.port}`} icon={<History className="size-3.5" />}>
-                              {p.entries.length}
-                            </Button>
-                          )}
-                          {canEdit && p.pending && (
-                            <Button size="sm" variant="ghost" onClick={() => env?.unstage(p.robot, p.port)} aria-label={`Undo pending update of ${p.robot} ${p.port}`} icon={<Undo2 className="size-3.5" />} />
-                          )}
-                          {canEdit && (
-                            <Button size="sm" variant="ghost" onClick={() => setEditing(p)} aria-label={`Update ${p.robot} ${p.port}`} icon={<PencilLine className="size-3.5" />}>
-                              Update
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {shown.map((p) => {
+                    const pendingStatus = p.pending?.status ? p.pending : undefined;
+                    return (
+                      <tr
+                        key={pendingId(p.robot, p.port)}
+                        className={cn("border-b border-border align-top last:border-0 hover:bg-accent-soft/40", p.pending && "bg-accent-soft/50")}
+                      >
+                        <td className="whitespace-nowrap px-3 py-2.5 font-semibold">{p.robot}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{p.port}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5">{p.platforms.join(", ") || "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{p.services.join(", ") || "—"}</td>
+                        <td className="max-w-[220px] px-3 py-2.5 text-xs text-fg-muted">
+                          <SetupLine row={p} /> {!shownSetup(p) && !p.pending?.setup && <span className="text-fg-subtle">—</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5">
+                          <div className="flex flex-col items-start gap-1">
+                            <StatusBadge state={p.state} />
+                            {pendingStatus?.status && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
+                                <ArrowRight className="size-3" aria-hidden /> {ENV_STATUS_LABELS[pendingStatus.status]} (pending)
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{(pendingStatus ? issueType(pendingStatus) : issueType(p.latest)) ?? "—"}</td>
+                        <td className="max-w-[380px] whitespace-pre-line px-3 py-2.5 text-[13px]">
+                          {(pendingStatus ? pendingStatus.note : p.latest?.note) || <span className="text-fg-subtle">—</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-xs text-fg-muted">{p.pending ? <PendingBadge /> : <Updated entry={p.latest} />}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right">
+                          <div className="inline-flex gap-1">
+                            {p.entries.length + p.setupEntries.length > 0 && (
+                              <Button size="sm" variant="ghost" onClick={() => setViewingHistory(p)} aria-label={`History of ${p.robot} ${p.port}`} icon={<History className="size-3.5" />}>
+                                {p.entries.length + p.setupEntries.length}
+                              </Button>
+                            )}
+                            {canEdit && p.pending && (
+                              <Button size="sm" variant="ghost" onClick={() => env?.unstage(p.robot, p.port)} aria-label={`Undo pending update of ${p.robot} ${p.port}`} icon={<Undo2 className="size-3.5" />} />
+                            )}
+                            {canEdit && (
+                              <Button size="sm" variant="ghost" onClick={() => setEditing(p)} aria-label={`Update ${p.robot} ${p.port}`} icon={<PencilLine className="size-3.5" />}>
+                                Update
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -559,14 +597,14 @@ function PortItem({
   onHistory: () => void;
   onUndo: () => void;
 }) {
-  const problem = PROBLEM.includes(row.state);
-  const pending = row.pending;
+  const pendingStatus = row.pending?.status ? row.pending : undefined;
+  const historyCount = row.entries.length + row.setupEntries.length;
   return (
     <li
       className={cn(
         "rounded-2xl border p-3 transition",
         row.state === "down" ? "border-danger/30 bg-danger-soft/60" : row.state === "issue" ? "border-warning/30 bg-warning-soft/60" : "border-border bg-surface/50",
-        pending && "border-dashed border-accent/60 ring-1 ring-accent/30",
+        row.pending && "border-dashed border-accent/60 ring-1 ring-accent/30",
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -574,41 +612,41 @@ function PortItem({
         {row.platforms.length > 0 && <span className="text-xs text-fg-muted">{row.platforms.join(", ")}</span>}
         <StatusBadge state={row.state} className="ml-auto" />
       </div>
-      {row.latest && (problem || row.latest.note) && (
+      <SetupLine row={row} className="mt-1.5" />
+      {/* Only the latest status is shown here; older ones are in the history. */}
+      {row.latest && (issueType(row.latest) || row.latest.note) && (
         <div className="mt-2">
           {issueType(row.latest) && <span className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{issueType(row.latest)}</span>}
-          {row.latest.note && (
-            <p className="mt-0.5 line-clamp-4 whitespace-pre-line text-[13px] text-fg">{row.latest.note}</p>
-          )}
+          {row.latest.note && <p className="mt-0.5 line-clamp-4 whitespace-pre-line text-[13px] text-fg">{row.latest.note}</p>}
         </div>
       )}
-      {pending && (
+      {pendingStatus?.status && (
         <div className="mt-2 rounded-xl border border-dashed border-accent/50 bg-accent-soft/70 p-2.5">
           <div className="flex flex-wrap items-center gap-1.5">
             <PendingBadge />
             <ArrowRight className="size-3 text-fg-subtle" aria-hidden />
-            <StatusBadge state={stateOf(pending)} />
-            {issueType(pending) && <span className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{issueType(pending)}</span>}
+            <StatusBadge state={pendingStatus.status} />
+            {issueType(pendingStatus) && <span className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{issueType(pendingStatus)}</span>}
           </div>
-          {pending.note && <p className="mt-1 line-clamp-4 whitespace-pre-line text-[13px] text-fg">{pending.note}</p>}
+          {pendingStatus.note && <p className="mt-1 line-clamp-4 whitespace-pre-line text-[13px] text-fg">{pendingStatus.note}</p>}
         </div>
       )}
       <div className="mt-2 flex items-center gap-2 text-[11px] text-fg-muted">
         <Updated entry={row.latest} />
         <span className="ml-auto inline-flex gap-1">
-          {row.entries.length > 0 && (
+          {historyCount > 0 && (
             <button type="button" onClick={onHistory} className="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 font-medium hover:bg-surface-2 hover:text-fg" aria-label={`History of ${row.robot} ${row.port}`}>
-              <History className="size-3.5" aria-hidden /> {row.entries.length}
+              <History className="size-3.5" aria-hidden /> {historyCount}
             </button>
           )}
-          {canEdit && pending && (
+          {canEdit && row.pending && (
             <button type="button" onClick={onUndo} className="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 font-medium hover:bg-surface-2 hover:text-fg" aria-label={`Undo pending update of ${row.robot} ${row.port}`}>
               <Undo2 className="size-3.5" aria-hidden /> Undo
             </button>
           )}
           {canEdit && (
             <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 font-semibold text-accent hover:bg-accent-soft" aria-label={`Update ${row.robot} ${row.port}`}>
-              <PencilLine className="size-3.5" aria-hidden /> {pending ? "Edit" : "Update"}
+              <PencilLine className="size-3.5" aria-hidden /> {row.pending ? "Edit" : "Update"}
             </button>
           )}
         </span>
@@ -619,32 +657,52 @@ function PortItem({
 
 function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => void }) {
   const env = useEnvironment();
-  const [status, setStatus] = useState<EnvStatus>("issue");
+  const [setup, setSetup] = useState("");
+  const [status, setStatus] = useState<EnvStatus>("ok");
   const [category, setCategory] = useState<EnvCategory>("environment");
   const [note, setNote] = useState("");
 
-  // Start from the pending change (if any), else the port's current state, so a small change is a small edit.
-  const base = row?.pending ?? row?.latest;
+  // Start from the pending change (if any), else what is saved, so a small change is a small edit.
   useEffect(() => {
     if (!row) return;
-    const from = row.pending ?? row.latest;
-    setStatus(from?.status ?? "issue");
+    const from = row.pending?.status ? row.pending : row.latest;
+    setSetup(row.pending?.setup ?? row.setup);
+    setStatus(from?.status ?? "ok");
     setCategory(from?.category ?? "environment");
     setNote(from?.note ?? "");
   }, [row]);
 
-  const same = (a?: { status: EnvStatus; category?: EnvCategory; note: string }) =>
-    Boolean(a && a.status === status && (status === "ok" || a.category === category) && a.note === note.trim());
-  const unchanged = same(base);
+  const setupChanged = Boolean(row) && setup.trim() !== (row?.setup ?? "");
+  const latest = row?.latest;
+  // A port with no report only gets a status entry when something is actually said about it.
+  const statusChanged = latest
+    ? latest.status !== status || (status !== "ok" && latest.category !== category) || latest.note !== note.trim()
+    : status !== "ok" || note.trim() !== "";
   const needsNote = status !== "ok" && note.trim() === "";
+  const base = row?.pending;
+  const sameAsPending =
+    Boolean(base) &&
+    (base?.setup ?? null) === (setupChanged ? setup.trim() : null) &&
+    (base?.status ?? null) === (statusChanged ? status : null) &&
+    (!statusChanged || ((base?.note ?? "") === note.trim() && (status === "ok" || base?.category === category)));
 
   const add = () => {
     if (!row || !env) return;
-    // Setting a port back to what is already saved simply drops its pending change.
-    if (same(row.latest)) env.unstage(row.robot, row.port);
-    else env.stage({ robot: row.robot, port: row.port, status, ...(status !== "ok" ? { category } : {}), note });
+    if (!setupChanged && !statusChanged) {
+      // Back to what is already saved → nothing pending for this port.
+      env.unstage(row.robot, row.port);
+    } else {
+      env.stage({
+        robot: row.robot,
+        port: row.port,
+        ...(statusChanged ? { status, ...(status !== "ok" ? { category } : {}), note } : {}),
+        ...(setupChanged ? { setup } : {}),
+      });
+    }
     onClose();
   };
+
+  const nothingToDo = !row?.pending && !setupChanged && !statusChanged;
 
   return (
     <Dialog
@@ -658,13 +716,29 @@ function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => vo
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={add} disabled={unchanged || needsNote}>
+          <Button variant="primary" onClick={add} disabled={nothingToDo || sameAsPending || (statusChanged && needsNote)}>
             {row?.pending ? "Update pending" : "Add to pending"}
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-border bg-surface-2/50 p-3">
+          <FieldLabel htmlFor="env-setup" hint={`${setup.length} / ${MAX_SETUP_LENGTH}`}>
+            <span className="inline-flex items-center gap-1.5">
+              <Settings2 className="size-3.5" aria-hidden /> Setup info
+            </span>
+          </FieldLabel>
+          <Input
+            id="env-setup"
+            value={setup}
+            maxLength={MAX_SETUP_LENGTH}
+            onChange={(e) => setSetup(e.target.value)}
+            placeholder="e.g. Router 3 Port2 · VLAN 202 · Manual device · Wi-Fi VCOE8"
+          />
+          <p className="mt-1 text-xs text-fg-muted">Permanent facts about this port. Always shown on the card, whatever the status.</p>
+        </div>
+
         <div>
           <FieldLabel>Status</FieldLabel>
           <div className="flex rounded-xl bg-surface-2 p-1" role="radiogroup" aria-label="Status">
@@ -684,7 +758,6 @@ function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => vo
               </button>
             ))}
           </div>
-          {status === "ok" && <p className="mt-1.5 text-xs text-fg-muted">OK = no problem. Add a comment if useful (manual device, VLAN, Wi-Fi…).</p>}
         </div>
         {status !== "ok" && (
           <div>
@@ -707,11 +780,11 @@ function UpdateDialog({ row, onClose }: { row: PortRow | null; onClose: () => vo
             value={note}
             maxLength={MAX_NOTE_LENGTH}
             onChange={(e) => setNote(e.target.value)}
-            rows={6}
-            placeholder={status === "ok" ? "e.g. Manual device · VLAN 202 · Wi-Fi connected to VCOE8" : "e.g. No internet on the box since 27/4 — MCAST live not working, OTT fine"}
+            rows={5}
+            placeholder={status === "ok" ? "e.g. Router rebooted, all channels working again" : "e.g. 27/4: no internet on the box — MCAST live not working, OTT fine"}
             className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg transition placeholder:text-fg-subtle hover:border-border-strong focus:border-accent focus:outline-none focus:ring-4 focus:ring-ring"
           />
-          {needsNote && <p className="mt-1 text-xs text-fg-muted">Describe the issue so others know what is wrong.</p>}
+          {statusChanged && needsNote && <p className="mt-1 text-xs text-fg-muted">Describe the issue so others know what is wrong.</p>}
         </div>
       </div>
     </Dialog>
@@ -754,7 +827,7 @@ function ReviewDialog({ open, onClose, rows }: { open: boolean; onClose: () => v
       locked={env?.writing}
       size="lg"
       title={`Push ${count} update${count === 1 ? "" : "s"}`}
-      description="All of these are saved to GitHub together, in one commit. Each becomes a new history entry."
+      description="All of these are saved to GitHub together, in one commit. Each change is added to the port's history."
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={env?.writing}>
@@ -777,17 +850,25 @@ function ReviewDialog({ open, onClose, rows }: { open: boolean; onClose: () => v
             const current = rows.get(id);
             return (
               <li key={id} className="flex gap-3 p-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-sm font-semibold text-fg">
-                      {p.robot} · {p.port}
-                    </span>
-                    <StatusBadge state={current?.state ?? "none"} />
-                    <ArrowRight className="size-3 text-fg-subtle" aria-hidden />
-                    <StatusBadge state={stateOf(p)} />
-                    {issueType(p) && <span className="text-xs text-fg-muted">{issueType(p)}</span>}
-                  </div>
-                  {p.note && <p className="mt-1 whitespace-pre-line text-[13px] text-fg">{p.note}</p>}
+                <div className="min-w-0 flex-1 space-y-1">
+                  <span className="text-sm font-semibold text-fg">
+                    {p.robot} · {p.port}
+                  </span>
+                  {p.setup !== undefined && (
+                    <p className="flex flex-wrap items-center gap-1.5 text-xs text-fg-muted">
+                      <Settings2 className="size-3.5" aria-hidden /> Setup: <span className="line-through">{current?.setup || "—"}</span>
+                      <ArrowRight className="size-3" aria-hidden /> <span className="font-medium text-fg">{p.setup || "(cleared)"}</span>
+                    </p>
+                  )}
+                  {p.status && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <StatusBadge state={current?.state ?? "none"} />
+                      <ArrowRight className="size-3 text-fg-subtle" aria-hidden />
+                      <StatusBadge state={p.status} />
+                      {issueType(p) && <span className="text-xs text-fg-muted">{issueType(p)}</span>}
+                    </div>
+                  )}
+                  {p.status && p.note && <p className="whitespace-pre-line text-[13px] text-fg">{p.note}</p>}
                 </div>
                 <Button
                   size="icon"
@@ -808,39 +889,61 @@ function ReviewDialog({ open, onClose, rows }: { open: boolean; onClose: () => v
   );
 }
 
+type HistoryRow = { kind: "status"; entry: EnvEntry; current: boolean } | { kind: "setup"; entry: SetupEntry; current: boolean };
+
 function HistoryDialog({ row, onClose }: { row: PortRow | null; onClose: () => void }) {
-  const entries = row ? [...row.entries].reverse() : [];
+  const items: HistoryRow[] = row
+    ? [
+        ...row.entries.map((entry, i): HistoryRow => ({ kind: "status", entry, current: i === row.entries.length - 1 })),
+        ...row.setupEntries.map((entry, i): HistoryRow => ({ kind: "setup", entry, current: i === row.setupEntries.length - 1 })),
+      ].sort((a, b) => b.entry.at.localeCompare(a.entry.at))
+    : [];
   return (
     <Dialog
       open={Boolean(row)}
       onOpenChange={(open) => !open && onClose()}
       size="lg"
       title={row ? `History · ${row.robot} · ${row.port}` : "History"}
-      description={row ? `${row.entries.length} update${row.entries.length === 1 ? "" : "s"}, newest first.` : undefined}
+      description={row ? `${items.length} change${items.length === 1 ? "" : "s"}, newest first.` : undefined}
     >
       <ol className="relative space-y-4 border-l border-border pl-5">
-        {entries.map((e, i) => (
-          <HistoryItem key={`${e.at}-${i}`} entry={e} current={i === 0} />
+        {items.map((item, i) => (
+          <li key={`${item.kind}-${item.entry.at}-${i}`} className="relative">
+            <span
+              className={cn(
+                "absolute -left-[26px] top-1.5 size-2.5 rounded-full ring-4 ring-surface",
+                item.kind === "status" ? STATE_STYLE[item.entry.status].dot : "bg-accent",
+              )}
+              aria-hidden
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              {item.kind === "status" ? (
+                <>
+                  <StatusBadge state={item.entry.status} />
+                  {issueType(item.entry) && <span className="text-xs font-medium text-fg-muted">{issueType(item.entry)}</span>}
+                  {item.current && <Badge tone="accent">Current</Badge>}
+                </>
+              ) : (
+                <>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">
+                    <Settings2 className="size-3" aria-hidden /> Setup
+                  </span>
+                  {item.current && <Badge tone="accent">Current</Badge>}
+                </>
+              )}
+              <span className="ml-auto text-xs text-fg-subtle" title={new Date(item.entry.at).toLocaleString()}>
+                {new Date(item.entry.at).toLocaleDateString()} {formatTime(item.entry.at)}
+                {item.entry.by && <> · {item.entry.by}</>}
+              </span>
+            </div>
+            {item.entry.note ? (
+              <p className="mt-1.5 whitespace-pre-line text-[13px] text-fg">{item.entry.note}</p>
+            ) : (
+              item.kind === "setup" && <p className="mt-1.5 text-[13px] italic text-fg-muted">Setup cleared</p>
+            )}
+          </li>
         ))}
       </ol>
     </Dialog>
-  );
-}
-
-function HistoryItem({ entry, current }: { entry: EnvEntry; current: boolean }): ReactNode {
-  return (
-    <li className="relative">
-      <span className={cn("absolute -left-[26px] top-1.5 size-2.5 rounded-full ring-4 ring-surface", STATE_STYLE[stateOf(entry)].dot)} aria-hidden />
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge state={stateOf(entry)} />
-        {issueType(entry) && <span className="text-xs font-medium text-fg-muted">{issueType(entry)}</span>}
-        {current && <Badge tone="accent">Current</Badge>}
-        <span className="ml-auto text-xs text-fg-subtle" title={new Date(entry.at).toLocaleString()}>
-          {new Date(entry.at).toLocaleDateString()} {formatTime(entry.at)}
-          {entry.by && <> · {entry.by}</>}
-        </span>
-      </div>
-      {entry.note && <p className="mt-1.5 whitespace-pre-line text-[13px] text-fg">{entry.note}</p>}
-    </li>
   );
 }

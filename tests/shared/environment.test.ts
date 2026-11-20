@@ -124,6 +124,22 @@ describe("EnvironmentService", () => {
     expect(validateEntryInput(entry({ status: "issue", category: undefined }))).toContain("Choose an issue type");
   });
 
+  it("keeps setup info separate from the status, with its own history", async () => {
+    const store = new MemoryStore(null);
+    const service = new EnvironmentService(store);
+    await service.addEntries([{ robot: "X111-GRE", port: "PORT4", setup: "Router 3 Port2" }], "a");
+    const result = await service.addEntries(
+      [{ robot: "X111-GRE", port: "PORT4", status: "down", category: "network", note: "No internet on the box", setup: "Router 3 Port2 · VLAN 202" }],
+      "b",
+    );
+    expect(result.doc.ports["X111-GRE"]!["PORT4"]).toHaveLength(1);
+    expect(result.doc.setup!["X111-GRE"]!["PORT4"]!.map((e) => e.note)).toEqual(["Router 3 Port2", "Router 3 Port2 · VLAN 202"]);
+    expect(store.writes[0]!.message.split("\n")[0]).toBe("Environment: X111-GRE PORT4 setup updated");
+    expect(store.writes[1]!.message.split("\n")[0]).toBe("Environment: X111-GRE PORT4 → Down (Network / internet), setup updated");
+    expect(validateEnvDoc(JSON.parse(store.text!)).ok).toBe(true);
+    expect(validateEntryInput({ robot: "X111-GRE", port: "PORT4" })).toContain("Nothing to update");
+  });
+
   it("allows an OK update without a note", () => {
     expect(validateEntryInput(entry({ status: "ok", note: "" }))).toEqual([]);
   });
