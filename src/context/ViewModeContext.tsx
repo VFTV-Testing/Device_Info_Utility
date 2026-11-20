@@ -14,10 +14,17 @@ export function useViewMode(): ViewModeValue | null {
 
 const VIEW_KEY = "dim-view-only";
 
-/** Opening the site with "?view" (the link shared with management) or a remembered choice. */
+/**
+ * Opening the site with "?view" (the link shared with management) or a remembered choice.
+ * Tolerant on purpose: "?view=1", "?View" or "?view**" pasted from chat all count.
+ */
+export function hasViewParam(search: string): boolean {
+  return /[?&]view\b/i.test(search);
+}
+
 export function wantsViewMode(): boolean {
   try {
-    if (new URLSearchParams(window.location.search).has("view")) return true;
+    if (hasViewParam(window.location.search)) return true;
     return sessionStorage.getItem(VIEW_KEY) === "1";
   } catch {
     return false;
@@ -31,9 +38,10 @@ export function rememberViewMode(on: boolean): void {
   } catch {
     /* storage unavailable — the choice lasts until the page is closed */
   }
-  if (!on && new URLSearchParams(window.location.search).has("view")) {
+  if (!on && hasViewParam(window.location.search)) {
+    // Drop the view parameter so "Sign in to edit" does not bounce straight back into view mode.
     const url = new URL(window.location.href);
-    url.searchParams.delete("view");
+    url.search = "";
     window.history.replaceState(null, "", url.toString());
   }
 }

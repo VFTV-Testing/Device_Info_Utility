@@ -92,3 +92,11 @@ describe("Sign-in page", () => {
     expect(onViewOnly).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("View link", () => {
+  it("recognises the view parameter even when chat apps mangle it", async () => {
+    const { hasViewParam } = await import("../../src/context/ViewModeContext");
+    for (const search of ["?view", "?view=1", "?View", "?view**", "?x=1&view"]) expect(hasViewParam(search)).toBe(true);
+    for (const search of ["", "?code=abc&state=xyz", "?preview=1", "?reviewer"]) expect(hasViewParam(search)).toBe(false);
+  });
+});
