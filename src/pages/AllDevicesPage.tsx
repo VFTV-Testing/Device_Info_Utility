@@ -293,8 +293,8 @@ export function AllDevicesPage() {
                   {describeFilters(filters, search)}
                 </p>
               ) : (
-                <p className="truncate text-[13px] text-fg-muted" title={config?.location}>
-                  {config?.location ?? "deviceInformation.json"}
+                <p className="truncate text-[13px] text-fg-muted" title={config?.viewOnly ? undefined : config?.location}>
+                  {config?.viewOnly ? "All devices" : (config?.location ?? "deviceInformation.json")}
                 </p>
               )}
               <p

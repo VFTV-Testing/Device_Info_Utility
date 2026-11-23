@@ -184,7 +184,7 @@ export function SignInPage({
       who: "Team",
       title: "Sign in with GitHub",
       description: githubEnabled
-        ? `Edit devices and the environment. Changes are committed under your name (Write access to ${target.repo} needed).`
+        ? "Edit devices and the environment. Changes are committed under your name."
         : "GitHub sign-in is not set up for this site.",
       action: "Continue with GitHub",
       ariaLabel: "Sign in with GitHub",
@@ -197,9 +197,9 @@ export function SignInPage({
       show: showModerator,
       icon: <KeyRound className="size-6" />,
       iconClass: "bg-primary-gradient",
-      who: "Moderators · onsite",
+      who: "Moderators",
       title: "Moderator pass key",
-      description: "No GitHub account needed. Update the Environment status when you fix issues onsite.",
+      description: "No GitHub account needed. Update the Environment status with the pass key.",
       action: moderatorOpen ? "Enter your details below" : "Use the pass key",
       ariaLabel: "Sign in as moderator",
       active: moderatorOpen,
@@ -236,9 +236,6 @@ export function SignInPage({
             <Cpu className="size-7" aria-hidden />
           </motion.span>
           <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Device Information Manager</h1>
-          <p className="max-w-full truncate text-[13px] text-fg-muted" title={`${target.owner}/${target.repo} · ${target.branch} · ${target.filePath}`}>
-            {target.owner}/{target.repo} · {target.branch} · {target.filePath}
-          </p>
           <p className="text-sm text-fg-muted">How would you like to continue?</p>
         </motion.header>
 

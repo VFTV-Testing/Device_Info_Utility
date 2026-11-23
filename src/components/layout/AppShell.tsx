@@ -77,7 +77,10 @@ export function AppShell() {
             </div>
             <div className="min-w-0">
               <h1 className="truncate font-display text-[15px] font-bold leading-tight text-fg">Device Manager</h1>
-              {config ? (
+              {config?.viewOnly ? (
+                // View-only visitors and moderators don't need to see where the data lives.
+                <p className="text-[11px] text-fg-muted">Device information</p>
+              ) : config ? (
                 <a
                   href={config.repoUrl}
                   target="_blank"

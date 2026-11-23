@@ -50,7 +50,7 @@ export function DataStateGate({ children }: { children: ReactNode }) {
           </div>
           <h2 className="text-lg font-semibold">Device file not found</h2>
           <p className="mt-2 text-sm text-fg-muted">
-            {config?.location ? <code className="text-xs">{config.location}</code> : "The configured file"} does not exist yet.
+            {config?.location && !config.viewOnly ? <code className="text-xs">{config.location}</code> : "The data file"} does not exist yet.
             You can initialise it as an empty JSON object <code>{"{}"}</code>. An existing file is never replaced.
           </p>
           <div className="mt-6 flex justify-center gap-2">
@@ -118,8 +118,8 @@ export function DataStateGate({ children }: { children: ReactNode }) {
         </Notice>
       ) : config?.viewOnly ? (
         <Notice tone="accent" icon={<Eye className="size-4" />} title="You are viewing without signing in" className="mb-5">
-          Everything is read only and refreshes automatically (changes appear within about 5 minutes). Team members with access to{" "}
-          <code className="text-xs">{config.location}</code> can use <strong>Sign in to edit</strong> at the top.
+          Everything is read only and refreshes automatically (changes appear within about 5 minutes). Team members can use{" "}
+          <strong>Sign in to edit</strong> at the top.
         </Notice>
       ) : config?.readOnly && (
         <Notice tone="warning" icon={<Lock className="size-4" />} title="Read-only — changes cannot be saved" className="mb-5">
