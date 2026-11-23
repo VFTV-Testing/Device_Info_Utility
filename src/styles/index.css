@@ -344,38 +344,37 @@ html.dark .bg-preview[data-preview="waves"]::after {
   .welcome-toaster [data-sonner-toast] { transition-duration: 0.01s !important; }
 }
 
-/* Welcome card: soft tinted glass pill in the app's indigo → cyan accent; follows light/dark tokens. */
+/* Welcome card: slim one-line glass pill in the app's indigo accent; follows light/dark tokens.
+   The toaster is narrowed (--width) so its invisible box doesn't block clicks on the page. */
+.welcome-toaster {
+  --width: 260px;
+}
 .welcome-toaster [data-sonner-toast] {
   width: 100%;
+  display: flex;
+  justify-content: flex-end;
 }
 .welcome-card {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 14px;
-  width: 100%;
-  min-width: 300px;
-  padding: 14px 14px 14px 16px;
-  border-radius: 22px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
-  background:
-    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 60%),
-    radial-gradient(120% 140% at 100% 100%, color-mix(in srgb, #22d3ee 16%, transparent), transparent 65%),
-    color-mix(in srgb, var(--surface) 88%, var(--accent));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 45%, transparent),
-    0 10px 30px -8px var(--primary-glow);
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 5px 5px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--surface) 90%, var(--accent));
+  box-shadow: 0 6px 18px -8px var(--primary-glow);
   font-family: inherit;
 }
 .welcome-card__icon {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
-  color: var(--accent);
-  border: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: #fff;
+  background: var(--accent);
 }
 .welcome-card__wave {
   transform-origin: 70% 80%;
@@ -383,30 +382,37 @@ html.dark .bg-preview[data-preview="waves"]::after {
 }
 .welcome-card__title {
   margin: 0;
-  font-size: 15px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--fg);
+}
+.welcome-card__title b {
   font-weight: 700;
-  line-height: 1.25;
   color: var(--accent);
 }
 .welcome-card__sub {
-  margin: 2px 0 0;
-  font-size: 12.5px;
-  color: color-mix(in srgb, var(--accent) 55%, var(--fg-muted));
+  font-size: 12px;
+  color: var(--fg-muted);
 }
 .welcome-card__close {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
   border-radius: 999px;
-  color: var(--accent);
+  color: var(--fg-muted);
   background: transparent;
   border: 0;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 .welcome-card__close:hover {
+  color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .welcome-card__close:focus-visible {
