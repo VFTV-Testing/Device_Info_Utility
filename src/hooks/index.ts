@@ -11,6 +11,7 @@ export function useDebouncedValue<T>(value: T, delay = 200): T {
 
 export type Theme = "light" | "dark";
 const THEME_KEY = "dim-theme";
+const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 function readStoredTheme(): Theme | null {
   try {
@@ -21,35 +22,67 @@ function readStoredTheme(): Theme | null {
   }
 }
 
+function storeTheme(value: Theme | null): void {
+  try {
+    if (value) localStorage.setItem(THEME_KEY, value);
+    else localStorage.removeItem(THEME_KEY);
+  } catch {
+    /* storage unavailable — theme still applies for this session */
+  }
+}
+
 function systemTheme(): Theme {
   try {
-    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return window.matchMedia?.(DARK_QUERY).matches ? "dark" : "light";
   } catch {
     return "light";
   }
 }
 
-/** Theme preference is a per-browser convenience only; it is not application data. */
-export function useTheme(): [Theme, () => void] {
-  const [theme, setTheme] = useState<Theme>(() => readStoredTheme() ?? systemTheme());
+/**
+ * Light / dark theme that follows the Windows or browser setting automatically.
+ * Picking Light or Dark overrides it in this browser; the override is dropped when the
+ * system setting changes, or when the pick matches the system again.
+ */
+export function useTheme(): [Theme, (next: Theme) => void] {
+  const [override, setOverride] = useState<Theme | null>(readStoredTheme);
+  const [system, setSystem] = useState<Theme>(systemTheme);
+
+  useEffect(() => {
+    let media: MediaQueryList | undefined;
+    try {
+      media = window.matchMedia?.(DARK_QUERY);
+    } catch {
+      return;
+    }
+    if (!media) return;
+    const query = media;
+    const onChange = () => {
+      setSystem(query.matches ? "dark" : "light");
+      setOverride(null); // the system setting just changed: follow it again
+      storeTheme(null);
+    };
+    query.addEventListener?.("change", onChange);
+    return () => query.removeEventListener?.("change", onChange);
+  }, []);
+
+  const theme: Theme = override ?? system;
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.style.colorScheme = theme;
   }, [theme]);
 
-  const toggle = useCallback(() => {
-    setTheme((current) => {
-      const next = current === "dark" ? "light" : "dark";
-      try {
-        localStorage.setItem(THEME_KEY, next);
-      } catch {
-        /* storage unavailable — theme still applies for this session */
-      }
-      return next;
-    });
-  }, []);
+  const setTheme = useCallback(
+    (next: Theme) => {
+      const value = next === system ? null : next;
+      setOverride(value);
+      storeTheme(value);
+    },
+    [system],
+  );
 
-  return [theme, toggle];
+  return [theme, setTheme];
 }
 
 /** Warns before closing/reloading the tab while there are unsaved edits. */

@@ -332,3 +332,94 @@ html.dark .bg-preview[data-preview="waves"]::after {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Welcome toast: slide in from the right edge (and back out), instead of Sonner's drop-down from the top. */
+.welcome-toaster [data-sonner-toast] {
+  --y: translateX(calc(100% + 32px)) !important;
+}
+.welcome-toaster [data-sonner-toast][data-mounted="true"]:not([data-removed="true"]) {
+  --y: translateX(0) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome-toaster [data-sonner-toast] { transition-duration: 0.01s !important; }
+}
+
+/* Welcome card: soft tinted glass pill in the app's indigo → cyan accent; follows light/dark tokens. */
+.welcome-toaster [data-sonner-toast] {
+  width: 100%;
+}
+.welcome-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-width: 300px;
+  padding: 14px 14px 14px 16px;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 60%),
+    radial-gradient(120% 140% at 100% 100%, color-mix(in srgb, #22d3ee 16%, transparent), transparent 65%),
+    color-mix(in srgb, var(--surface) 88%, var(--accent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 45%, transparent),
+    0 10px 30px -8px var(--primary-glow);
+  font-family: inherit;
+}
+.welcome-card__icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  color: var(--accent);
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.welcome-card__wave {
+  transform-origin: 70% 80%;
+  animation: welcome-wave 1.2s ease-in-out 0.35s 2;
+}
+.welcome-card__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--accent);
+}
+.welcome-card__sub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--accent) 55%, var(--fg-muted));
+}
+.welcome-card__close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.welcome-card__close:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.welcome-card__close:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@keyframes welcome-wave {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(16deg); }
+  40% { transform: rotate(-8deg); }
+  60% { transform: rotate(14deg); }
+  80% { transform: rotate(-4deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome-card__wave { animation: none; }
+}

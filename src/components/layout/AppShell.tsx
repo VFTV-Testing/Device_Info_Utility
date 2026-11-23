@@ -1,8 +1,10 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Activity, Cpu, Eye, GitBranch, HardDrive, LayoutGrid, LogIn, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { Activity, Cpu, Eye, GitBranch, HardDrive, LayoutGrid, LogIn, LogOut, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, useLocation, useOutlet } from "react-router-dom";
 import { Toaster } from "sonner";
+import { takeWelcome } from "../../services/welcome";
+import { showWelcome } from "./WelcomeToast";
 import { useAuth } from "../../context/AuthContext";
 import { useModerator } from "../../context/ModeratorContext";
 import { useViewMode } from "../../context/ViewModeContext";
@@ -34,7 +36,7 @@ const NAV = [
 
 export function AppShell() {
   const { config, hasUnsavedChanges } = useDeviceData();
-  const [theme, toggleTheme] = useTheme();
+  const [theme, setTheme] = useTheme();
   const [background, setBackground] = useBackground();
   const auth = useAuth();
   const viewMode = useViewMode();
@@ -48,6 +50,16 @@ export function AppShell() {
 
   const SourceIcon = config?.storage === "local" ? HardDrive : GitBranch;
   const initials = (auth?.session.name ?? config?.user ?? "").slice(0, 2).toUpperCase();
+
+  // Greet once after a fresh sign-in. The short delay lets the top-right Toaster mount first
+  // (and the cleanup keeps React StrictMode's double effect from greeting twice).
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const welcome = takeWelcome();
+      if (welcome) showWelcome(welcome);
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   return (
     <div className="min-h-dvh">
@@ -139,10 +151,7 @@ export function AppShell() {
                 )}
               </span>
             )}
-            <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
-              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            </Button>
-            <AppearanceMenu theme={theme} onToggleTheme={toggleTheme} background={background} onBackground={setBackground} />
+            <AppearanceMenu theme={theme} onTheme={setTheme} background={background} onBackground={setBackground} />
             {viewMode && (
               <Button variant="secondary" size="sm" onClick={viewMode.exit} icon={<LogIn className="size-3.5" aria-hidden />}>
                 Sign in to edit
@@ -190,6 +199,7 @@ export function AppShell() {
       </main>
 
       <Toaster position="bottom-right" theme={theme} richColors closeButton toastOptions={{ className: "text-sm" }} />
+      <Toaster id="welcome" className="welcome-toaster" position="top-right" offset={{ top: 84 }} theme={theme} />
     </div>
   );
 }

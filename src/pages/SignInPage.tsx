@@ -8,6 +8,7 @@ import { cn } from "../lib/cn";
 import { completeGitHubLogin, startGitHubLogin } from "../services/githubOAuth";
 import { clearStoredToken, readStoredCredentials, signInWithCredentials, type GitHubSession } from "../services/githubSession";
 import { MODERATOR_ENABLED, storeModerator, verifyModeratorKey, type ModeratorSession } from "../services/moderator";
+import { queueWelcome } from "../services/welcome";
 
 function GitHubMark({ className }: { className?: string }) {
   return (
@@ -117,7 +118,9 @@ export function SignInPage({
       try {
         const fromGitHub = await completeGitHubLogin();
         if (fromGitHub) {
-          onSignedIn(await signInWithCredentials(fromGitHub, target));
+          const session = await signInWithCredentials(fromGitHub, target);
+          queueWelcome(session.name || session.login, "github");
+          onSignedIn(session);
           return;
         }
         const stored = readStoredCredentials();
@@ -153,6 +156,7 @@ export function SignInPage({
       await verifyKey(modKey.trim());
       const session: ModeratorSession = { name: modName.trim(), key: modKey.trim(), remember };
       storeModerator(session);
+      queueWelcome(session.name, "passkey");
       onModerator(session);
     } catch (e) {
       setModError((e as Error).message);

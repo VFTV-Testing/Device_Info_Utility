@@ -38,6 +38,8 @@ function rainScene(ctx: CanvasRenderingContext2D, p: Palette, size = 15): Scene 
     resize(width, height) {
       w = width;
       h = height;
+      ctx.font = `500 ${size - 2}px "JetBrains Mono Variable", ui-monospace, monospace`;
+      ctx.textAlign = "center";
       const count = Math.floor(w / (size * 1.6));
       columns = Array.from({ length: count }, (_, i) => ({
         x: i * size * 1.6 + rand(0, 4),
@@ -50,8 +52,6 @@ function rainScene(ctx: CanvasRenderingContext2D, p: Palette, size = 15): Scene 
     },
     frame(dt) {
       ctx.clearRect(0, 0, w, h);
-      ctx.font = `500 ${size - 2}px "JetBrains Mono Variable", ui-monospace, monospace`;
-      ctx.textAlign = "center";
       for (const c of columns) {
         c.y += c.speed * dt;
         if (c.y - c.trail * size > h) {
@@ -111,12 +111,17 @@ export function AnimatedBackground({ theme }: { scene: CanvasScene; theme: Theme
       if (reduce) scene?.frame(16);
     };
 
+    // ~30 fps is plenty for slow-falling characters, and each frame also forces the
+    // frosted-glass panels above the canvas to re-blur, so fewer frames = a smoother UI.
+    const FRAME_MS = 1000 / 30;
     let raf = 0;
     let last = performance.now();
     const loop = (now: number) => {
-      scene?.frame(Math.min(now - last, 50));
-      last = now;
       raf = requestAnimationFrame(loop);
+      const elapsed = now - last;
+      if (elapsed < FRAME_MS - 2) return;
+      scene?.frame(Math.min(elapsed, 100));
+      last = now;
     };
     if (reduce) scene.frame(16);
     else raf = requestAnimationFrame(loop);

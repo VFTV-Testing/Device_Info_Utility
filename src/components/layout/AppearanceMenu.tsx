@@ -7,14 +7,15 @@ import { Button } from "../ui/primitives";
 import { isCanvasScene, ScenePreview } from "./AnimatedBackground";
 
 interface AppearanceMenuProps {
+  /** The theme in effect (follows the Windows / browser setting unless overridden). */
   theme: Theme;
-  onToggleTheme: () => void;
+  onTheme: (next: Theme) => void;
   background: Background;
   onBackground: (next: Background) => void;
 }
 
-/** Theme (light/dark) and page background, saved per browser. */
-export function AppearanceMenu({ theme, onToggleTheme, background, onBackground: setBackground }: AppearanceMenuProps) {
+/** Theme (follows the system; Light / Dark override it) and page background, saved per browser. */
+export function AppearanceMenu({ theme, onTheme, background, onBackground: setBackground }: AppearanceMenuProps) {
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
@@ -43,7 +44,7 @@ export function AppearanceMenu({ theme, onToggleTheme, background, onBackground:
                   type="button"
                   role="radio"
                   aria-checked={theme === id}
-                  onClick={() => theme !== id && onToggleTheme()}
+                  onClick={() => onTheme(id)}
                   className={cn(
                     "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition",
                     theme === id ? "bg-primary-gradient text-white shadow-card" : "text-fg-muted hover:text-fg",
@@ -88,7 +89,7 @@ export function AppearanceMenu({ theme, onToggleTheme, background, onBackground:
                 );
               })}
             </div>
-            <p className="mt-3 text-[11px] text-fg-subtle">Saved in this browser only.</p>
+            <p className="mt-3 text-[11px] text-fg-subtle">Theme follows your Windows or browser setting. Saved in this browser only.</p>
           </motion.div>
         </Popover.Content>
       </Popover.Portal>
