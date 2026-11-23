@@ -394,10 +394,6 @@ html.dark .bg-preview[data-preview="waves"]::after {
   font-weight: 700;
   color: var(--accent);
 }
-.welcome-card__sub {
-  font-size: 12px;
-  color: var(--fg-muted);
-}
 .welcome-card__close {
   display: grid;
   place-items: center;
