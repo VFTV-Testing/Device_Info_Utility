@@ -49,7 +49,7 @@ export function SyncControl() {
           type="button"
           aria-label="Sync status and settings"
           className={cn(
-            "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition hover:brightness-110",
+            "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition hover:brightness-110",
             "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring",
             syncError && !style.spin ? "bg-warning-soft text-warning" : style.tone,
           )}

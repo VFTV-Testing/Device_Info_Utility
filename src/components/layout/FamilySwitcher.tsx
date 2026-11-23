@@ -64,11 +64,11 @@ export function FamilySwitcher({ confirmLeave }: { confirmLeave?: () => boolean 
           type="button"
           aria-label={`Device family: ${family.label}. Change family`}
           style={familyStyle(family)}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-[var(--fam-soft)] pl-1 pr-2.5 text-xs font-semibold text-[var(--fam-fg)] transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-[var(--fam-soft)] pl-1 pr-2.5 text-xs font-semibold text-[var(--fam-fg)] transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
         >
           {/* Keyed by family: the icon flips in each time the family changes. */}
-          <span key={family.id} className="fam-flip grid size-6 place-items-center rounded-full bg-[var(--fam)] text-white">
-            <FamilyIcon family={family} className="size-3.5" />
+          <span key={family.id} className="fam-flip grid size-5 place-items-center rounded-full bg-[var(--fam)] text-white">
+            <FamilyIcon family={family} className="size-3" />
           </span>
           {family.label}
           <ChevronDown className={cn("size-3.5 opacity-70 transition-transform duration-300", open && "rotate-180")} aria-hidden />

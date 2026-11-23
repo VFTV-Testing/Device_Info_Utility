@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Activity, Cpu, Eye, GitBranch, HardDrive, LayoutGrid, LogIn, LogOut, UserRound } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState, type RefObject } from "react";
 import { NavLink, useLocation, useOutlet } from "react-router-dom";
 import { Toaster } from "sonner";
 import { takeWelcome } from "../../services/welcome";
@@ -56,6 +56,21 @@ function useScrollingFlag(idleMs = 160) {
   }, [idleMs]);
 }
 
+/** Where the welcome message goes: just below the header, however tall it is (it wraps on narrow screens). */
+function useHeaderBottom(header: RefObject<HTMLElement | null>, gap = 10): number {
+  const [bottom, setBottom] = useState(84);
+  useEffect(() => {
+    const el = header.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setBottom(Math.round(el.getBoundingClientRect().height) + gap);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [header, gap]);
+  return bottom;
+}
+
 const NAV = [
   { to: "/", label: "Device Manager", icon: Cpu, end: true },
   { to: "/devices", label: "All Devices", icon: LayoutGrid, end: false },
@@ -74,6 +89,8 @@ export function AppShell() {
   const location = useLocation();
   const outlet = useOutlet();
   const scrolled = useScrolled();
+  const headerRef = useRef<HTMLElement>(null);
+  const welcomeTop = useHeaderBottom(headerRef);
   useScrollingFlag();
   const [fadeIn] = useState(familySwitchPending);
   useEffect(() => clearFamilySwitch(), []);
@@ -96,18 +113,19 @@ export function AppShell() {
     <div className="min-h-dvh">
       {isCanvasScene(background) && <AnimatedBackground scene={background} theme={theme} />}
       <header
+        ref={headerRef}
         className={cn(
           "sticky top-0 z-30 px-3 pb-3 pt-3 transition-[background] duration-300 sm:px-6",
           scrolled && "bg-[linear-gradient(to_bottom,var(--bg)_92%,transparent)]",
         )}
       >
-        <div className="glass-strong mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border px-3 py-2.5 shadow-card">
+        <div className="glass-strong mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border px-3 py-2 shadow-card">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-[linear-gradient(135deg,#6366f1,#22d3ee)] text-white shadow-card">
+            <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-[linear-gradient(135deg,#6366f1,#22d3ee)] text-white shadow-card">
               <Cpu className="size-[18px]" aria-hidden />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate font-display text-[15px] font-bold leading-tight text-fg">Device Manager</h1>
+              <h1 className="truncate font-display text-[14px] font-bold leading-tight text-fg">Device Manager</h1>
               {config?.viewOnly ? (
                 // View-only visitors and moderators don't need to see where the data lives.
                 <p className="text-[11px] text-fg-muted">Device information</p>
@@ -117,7 +135,7 @@ export function AppShell() {
                   target="_blank"
                   rel="noreferrer"
                   className={cn(
-                    "flex max-w-[52vw] items-center gap-1 truncate text-[11px] text-fg-muted sm:max-w-xs",
+                    "flex max-w-[52vw] items-center gap-1 truncate text-[11px] text-fg-muted sm:max-w-[200px]",
                     config.repoUrl ? "hover:text-accent" : "pointer-events-none",
                   )}
                   title={config.location}
@@ -141,7 +159,7 @@ export function AppShell() {
                     end={end}
                     className={({ isActive }) =>
                       cn(
-                        "relative flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors",
+                        "relative flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors",
                         isActive ? "text-fg" : "text-fg-muted hover:text-fg",
                       )
                     }
@@ -167,18 +185,18 @@ export function AppShell() {
 
           <div className="ml-auto flex items-center gap-1.5">
             {viewMode && (
-              <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-accent-soft px-3 text-xs font-semibold text-accent">
+              <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-accent-soft px-2.5 text-xs font-semibold text-accent">
                 <Eye className="size-3.5" aria-hidden /> View only
               </span>
             )}
             <SyncControl />
             {config?.user && (
               <span
-                className="ml-1 hidden size-8 place-items-center overflow-hidden rounded-full bg-surface-2 text-[11px] font-semibold text-fg-muted sm:grid"
+                className="ml-1 hidden size-7 place-items-center overflow-hidden rounded-full bg-surface-2 text-[11px] font-semibold text-fg-muted sm:grid"
                 title={auth?.session.name ?? config.user}
               >
                 {auth?.session.avatarUrl ? (
-                  <img src={auth.session.avatarUrl} alt={config.user} className="size-8" />
+                  <img src={auth.session.avatarUrl} alt={config.user} className="size-7" />
                 ) : initials ? (
                   initials
                 ) : (
@@ -188,16 +206,16 @@ export function AppShell() {
             )}
             <AppearanceMenu theme={theme} onTheme={setTheme} background={background} onBackground={setBackground} />
             {viewMode && (
-              <Button variant="secondary" size="sm" onClick={viewMode.exit} icon={<LogIn className="size-3.5" aria-hidden />}>
+              <Button variant="secondary" size="sm" className="h-7 text-xs" onClick={viewMode.exit} icon={<LogIn className="size-3.5" aria-hidden />}>
                 Sign in to edit
               </Button>
             )}
             {moderator && (
               <>
-                <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-accent-soft px-3 text-xs font-semibold text-accent" title="Signed in with the moderator key">
+                <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-accent-soft px-2.5 text-xs font-semibold text-accent" title="Signed in with the moderator key">
                   <UserRound className="size-3.5" aria-hidden /> Moderator · {moderator.name}
                 </span>
-                <Button variant="secondary" size="sm" onClick={moderator.signOut} icon={<LogOut className="size-3.5" aria-hidden />}>
+                <Button variant="secondary" size="sm" className="h-7 text-xs" onClick={moderator.signOut} icon={<LogOut className="size-3.5" aria-hidden />}>
                   Sign out
                 </Button>
               </>
@@ -206,6 +224,7 @@ export function AppShell() {
               <Button
                 variant="ghost"
                 size="icon"
+                className="size-8"
                 aria-label="Sign out"
                 title="Sign out"
                 onClick={() => {
@@ -240,7 +259,7 @@ export function AppShell() {
       </motion.main>
 
       <Toaster position="bottom-right" theme={theme} richColors closeButton toastOptions={{ className: "text-sm" }} />
-      <Toaster id="welcome" className="welcome-toaster" position="top-right" offset={{ top: 84 }} theme={theme} />
+      <Toaster id="welcome" className="welcome-toaster" position="top-right" offset={{ top: welcomeTop }} theme={theme} />
     </div>
   );
 }

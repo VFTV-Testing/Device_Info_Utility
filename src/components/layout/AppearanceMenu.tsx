@@ -19,7 +19,7 @@ export function AppearanceMenu({ theme, onTheme, background, onBackground: setBa
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Appearance" title="Appearance">
+        <Button variant="ghost" size="icon" className="size-8" aria-label="Appearance" title="Appearance">
           <Palette className="size-4" />
         </Button>
       </Popover.Trigger>
