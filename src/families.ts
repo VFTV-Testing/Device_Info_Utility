@@ -8,7 +8,7 @@ import { DATA_MODE, GITHUB_TARGET, type GitHubTarget } from "./config";
  */
 export interface DeviceFamily extends FamilySchema {
   label: string;
-  /** One line shown in the family picker. */
+  /** One line shown under the family name in the header menu. */
   description: string;
   /** Badge colour (mapped to the platform palette in FamilySwitcher). */
   tone: "stb" | "mobile" | "tv";

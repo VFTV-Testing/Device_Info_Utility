@@ -10,7 +10,6 @@ import { FamilyContext, type FamilyValue } from "./context/FamilyContext";
 import { FAMILIES, readFamilyChoice, rememberFamily, type DeviceFamily } from "./families";
 import { ModeratorContext } from "./context/ModeratorContext";
 import { rememberViewMode, ViewModeContext, wantsViewMode } from "./context/ViewModeContext";
-import { FamilyPickerPage } from "./pages/FamilyPickerPage";
 import { SignInPage } from "./pages/SignInPage";
 import { api } from "./services/api";
 import { clearStoredToken, createDirectClient, type GitHubSession } from "./services/githubSession";
@@ -61,14 +60,14 @@ function DirectApp() {
   const [session, setSession] = useState<GitHubSession | null>(null);
   const [viewOnly, setViewOnly] = useState(wantsViewMode);
   const [moderator, setModerator] = useState<ModeratorSession | null>(readModerator);
-  // Each device family is its own file; null until the user picks one (asked once, then remembered).
-  const [picked, setPicked] = useState<DeviceFamily | null>(readFamilyChoice);
-  const family = picked ?? FAMILIES[0]!;
+  // Each device family is its own file: the one in the link or last used here, else the first (STB).
+  // It is changed from the family pill in the header.
+  const [family, setFamily] = useState<DeviceFamily>(() => readFamilyChoice() ?? FAMILIES[0]!);
   // Open the family's fields and port format before anything below renders its records.
   setActiveSchema(family);
   const switchTo = useCallback((next: DeviceFamily) => {
     rememberFamily(next);
-    setPicked(next);
+    setFamily(next);
   }, []);
   const familyValue = useMemo<FamilyValue>(() => ({ family, families: FAMILIES, switchTo }), [family, switchTo]);
   const target = family.target;
@@ -101,10 +100,6 @@ function DirectApp() {
     rememberViewMode(false);
     setViewOnly(false);
   }, []);
-
-  const signedIn = Boolean(session || moderator || viewOnly);
-  // First visit after signing in (or opening the view): ask which family to open.
-  if (signedIn && !picked) return <FamilyPickerPage families={FAMILIES} onPick={switchTo} />;
 
   // The family is part of each provider key, so switching family starts from a clean slate.
   if (!session && moderator && moderatorClients) {
