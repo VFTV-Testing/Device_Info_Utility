@@ -27,8 +27,8 @@ export function useFieldSuggestions(): Record<"Hardware" | "Country", string[]> 
     const hardware = new Set<string>();
     const country = new Set<string>();
     for (const record of Object.values(snapshot?.data ?? {})) {
-      hardware.add(record.Hardware);
-      country.add(record.Country);
+      if (record.Hardware !== undefined) hardware.add(record.Hardware);
+      if (record.Country !== undefined) country.add(record.Country);
     }
     return { Hardware: [...hardware].sort(), Country: [...country].sort() };
   }, [snapshot]);

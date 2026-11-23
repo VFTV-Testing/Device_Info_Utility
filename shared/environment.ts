@@ -1,4 +1,4 @@
-import { naturalCompare, PORT_PATTERN } from "./deviceId";
+import { naturalCompare } from "./deviceId";
 import { AppError } from "./errors";
 import type { DeviceFileStore } from "./storeTypes";
 import type { CommitInfo } from "./types";
@@ -96,6 +96,8 @@ export interface EnvEntryInput {
 export const EMPTY_ENV_DOC: EnvironmentDoc = { version: 1, ports: {} };
 
 const ROBOT_PATTERN = /^[A-Za-z0-9_&.+]+(?:-[A-Za-z0-9_&.+]+)*$/;
+/** Every device family shares this file: ports are PORT1 (STB, Mobile) or P1 (Smart TV). */
+const ENV_PORT_PATTERN = /^(?:PORT|P)[1-9]\d*$/;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -162,7 +164,7 @@ export function validateEntryInput(input: unknown): string[] {
   if (!isObject(input)) return ["The update must be an object"];
   const problems: string[] = [];
   if (typeof input.robot !== "string" || !ROBOT_PATTERN.test(input.robot)) problems.push("A valid robot is required");
-  if (typeof input.port !== "string" || !PORT_PATTERN.test(input.port)) problems.push("A valid device port is required (e.g. PORT1)");
+  if (typeof input.port !== "string" || !ENV_PORT_PATTERN.test(input.port)) problems.push("A valid device port is required (e.g. PORT1)");
   if (input.status === undefined && input.setup === undefined) problems.push("Nothing to update");
   if (input.status !== undefined) {
     if (!ENV_STATUSES.includes(input.status as EnvStatus)) problems.push("Choose a status");

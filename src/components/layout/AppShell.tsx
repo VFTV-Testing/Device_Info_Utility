@@ -1,19 +1,22 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Activity, Cpu, Eye, GitBranch, HardDrive, LayoutGrid, LogIn, LogOut, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { NavLink, useLocation, useOutlet } from "react-router-dom";
 import { Toaster } from "sonner";
 import { takeWelcome } from "../../services/welcome";
 import { showWelcome } from "./WelcomeToast";
 import { useAuth } from "../../context/AuthContext";
+import { clearFamilySwitch, familySwitchPending } from "../../context/FamilyContext";
 import { useModerator } from "../../context/ModeratorContext";
 import { useViewMode } from "../../context/ViewModeContext";
 import { useDeviceData } from "../../context/DeviceDataContext";
 import { useBackground, useBeforeUnload, useTheme } from "../../hooks";
 import { cn } from "../../lib/cn";
+import { PageSkeleton } from "../common/DataStateGate";
 import { Button } from "../ui/primitives";
 import { AnimatedBackground, isCanvasScene } from "./AnimatedBackground";
 import { AppearanceMenu } from "./AppearanceMenu";
+import { FamilySwitcher } from "./FamilySwitcher";
 import { SyncControl } from "./SyncControl";
 
 /** True once the page is scrolled, so the header can get a backdrop only when content passes under it. */
@@ -26,6 +29,31 @@ function useScrolled(threshold = 8): boolean {
     return () => window.removeEventListener("scroll", onScroll);
   }, [threshold]);
   return scrolled;
+}
+
+/**
+ * Marks <html data-scrolling> while the page is being scrolled (and briefly after). The animated
+ * backgrounds hold still meanwhile, so the frosted panels are not re-blurred on every frame.
+ */
+function useScrollingFlag(idleMs = 160) {
+  useEffect(() => {
+    const root = document.documentElement;
+    let timer = 0;
+    const onScroll = () => {
+      if (!timer) root.setAttribute("data-scrolling", "");
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = 0;
+        root.removeAttribute("data-scrolling");
+      }, idleMs);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.clearTimeout(timer);
+      root.removeAttribute("data-scrolling");
+    };
+  }, [idleMs]);
 }
 
 const NAV = [
@@ -46,6 +74,9 @@ export function AppShell() {
   const location = useLocation();
   const outlet = useOutlet();
   const scrolled = useScrolled();
+  useScrollingFlag();
+  const [fadeIn] = useState(familySwitchPending);
+  useEffect(() => clearFamilySwitch(), []);
   useBeforeUnload(hasUnsavedChanges);
 
   const SourceIcon = config?.storage === "local" ? HardDrive : GitBranch;
@@ -98,6 +129,7 @@ export function AppShell() {
                 <p className="text-[11px] text-fg-subtle">Connecting to data source…</p>
               )}
             </div>
+            <FamilySwitcher confirmLeave={() => !hasUnsavedChanges || window.confirm("You have unsaved changes in this family. Switch anyway?")} />
           </div>
 
           <nav aria-label="Main" className="order-last w-full overflow-x-auto lg:order-none lg:ml-4 lg:w-auto">
@@ -187,7 +219,13 @@ export function AppShell() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+      {/* The shell mounts again for each device family: after a switch the new one fades in from a blur. */}
+      <motion.main
+        initial={fadeIn ? { opacity: 0, filter: "blur(6px)" } : false}
+        animate={{ opacity: 1, filter: "blur(0px)" }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8"
+      >
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={location.pathname}
@@ -196,10 +234,10 @@ export function AppShell() {
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.16, ease: "easeOut" }}
           >
-            {outlet}
+            <Suspense fallback={<PageSkeleton />}>{outlet}</Suspense>
           </motion.div>
         </AnimatePresence>
-      </main>
+      </motion.main>
 
       <Toaster position="bottom-right" theme={theme} richColors closeButton toastOptions={{ className: "text-sm" }} />
       <Toaster id="welcome" className="welcome-toaster" position="top-right" offset={{ top: 84 }} theme={theme} />

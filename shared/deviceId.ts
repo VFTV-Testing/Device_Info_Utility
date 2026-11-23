@@ -4,13 +4,45 @@ import type { DeviceData, ParsedDeviceId } from "./types";
  * Device identifiers look like  <device>-PORT<n>-<suffix>
  *   X101-GER-PORT1-AVSB-FUT_EMMC_Rayson-DE_PROD-DVBC
  *   └device─┘└port┘└──────────suffix──────────────┘
+ * Some device families write the port shorter, e.g. Smart TV:  X122-P1-FireOS-Amazon-AFTGAZL-LE
  *
- * The lazy prefix match picks the FIRST "-PORT<n>-" segment, so suffixes may
+ * The lazy prefix match picks the FIRST port segment, so suffixes may
  * contain anything (including "PORT" text) without confusing the parser.
+ * Which port spellings count depends on the open device family (setPortPrefixes).
  */
-const DEVICE_ID_PATTERN = /^(.+?)-(PORT(\d+))-(.+)$/;
+let portPrefixes: readonly string[] = ["PORT"];
+let DEVICE_ID_PATTERN = /^(.+?)-(PORT(\d+))-(.+)$/;
 
-export const PORT_PATTERN = /^PORT[1-9]\d*$/;
+/** A valid port name in the open device family, e.g. PORT1 (or P1 for Smart TV). */
+export let PORT_PATTERN = /^PORT[1-9]\d*$/;
+let PORT_SEGMENT = /-PORT\d+(-|$)/i;
+
+/** Longest first, so "PORT3" is never read as "P" followed by "ORT3". */
+function prefixGroup(prefixes: readonly string[]): string {
+  return [...prefixes].sort((a, b) => b.length - a.length).join("|");
+}
+
+/**
+ * Sets the port spellings of the open device family; the first is used for new devices.
+ * Called by setActiveSchema() (shared/schema.ts) when the user switches family.
+ */
+export function setPortPrefixes(prefixes: readonly string[]): void {
+  portPrefixes = prefixes.length ? [...prefixes] : ["PORT"];
+  const group = prefixGroup(portPrefixes);
+  DEVICE_ID_PATTERN = new RegExp(`^(.+?)-((?:${group})(\\d+))-(.+)$`);
+  PORT_PATTERN = new RegExp(`^(?:${group})[1-9]\\d*$`);
+  PORT_SEGMENT = new RegExp(`-(?:${group})\\d+(-|$)`, "i");
+}
+
+/** How new ports are written in the open family: "PORT" (PORT1) or "P" (P1). */
+export function defaultPortPrefix(): string {
+  return portPrefixes[0]!;
+}
+
+/** True when a device name contains a port segment of the open family. */
+export function containsPortSegment(device: string): boolean {
+  return PORT_SEGMENT.test(device);
+}
 
 /** Characters allowed in device prefixes and suffix segments (matches existing data, e.g. "Ray&Fore"). */
 export const SEGMENT_PATTERN = /^[A-Za-z0-9_&.+]+(?:-[A-Za-z0-9_&.+]+)*$/;
@@ -28,10 +60,15 @@ export function buildDeviceId(device: string, port: string, suffix: string): str
   return `${device}-${port}-${suffix}`;
 }
 
-/** Normalises user input like "1", "port1" or "PORT01" to "PORT1". Returns null if it is not a port. */
+/**
+ * Normalises user input like "1", "port1" or "PORT01" to "PORT1" (or "p1" to "P1" in a family
+ * that writes ports short). Returns null if it is not a port.
+ */
 export function normalizePort(input: string): string | null {
-  const match = /^(?:port)?\s*0*([1-9]\d*)$/i.exec(input.trim());
-  return match ? `PORT${match[1]}` : null;
+  const match = new RegExp(`^(${prefixGroup(portPrefixes)})?\\s*0*([1-9]\\d*)$`, "i").exec(input.trim());
+  if (!match) return null;
+  const typed = match[1] ? portPrefixes.find((p) => p.toLowerCase() === match[1]!.toLowerCase()) : undefined;
+  return `${typed ?? defaultPortPrefix()}${match[2]}`;
 }
 
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });

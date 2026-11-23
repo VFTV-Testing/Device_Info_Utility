@@ -1,4 +1,5 @@
 import { parseDeviceId } from "../../shared/deviceId";
+import { activeSchema, hasField } from "../../shared/schema";
 import type { DeviceData, DeviceRecord } from "../../shared/types";
 
 /**
@@ -32,6 +33,18 @@ export const FILTER_LABELS: Record<FilterName, string> = {
 export const FILTER_NAMES = Object.keys(FILTER_LABELS) as FilterName[];
 export const EMPTY_FILTERS = Object.fromEntries(FILTER_NAMES.map((n) => [n, []])) as unknown as Filters;
 
+/**
+ * The filters that make sense for the open device family. Platform is always offered
+ * (families without a Hardware field take it from the identifier); the others need their field.
+ */
+export function availableFilters(): FilterName[] {
+  return FILTER_NAMES.filter((name) => {
+    if (name === "device" || name === "Hardware") return true;
+    if (name === "country" || name === "service") return hasField("Country");
+    return hasField(name);
+  });
+}
+
 /** Friendly names for the country codes used in the Country field (unknown codes show as-is). */
 export const COUNTRY_NAMES: Record<string, string> = {
   AL: "Albania",
@@ -56,12 +69,23 @@ export function splitCountry(value: string): { country: string; service: string 
   return i < 0 ? { country: value, service: "—" } : { country: value.slice(0, i), service: value.slice(i + 1) };
 }
 
+/**
+ * One row per record. Fields a family does not have are shown as "—". A family without a
+ * Hardware field gets its platform from the identifier: X103-GER-PORT1-ANDROID-TABLET → ANDROID,
+ * X122-P1-FireOS-Amazon-AFTGAZL-LE → FireOS (display only, never written to the file).
+ */
 export function buildRows(data: DeviceData): Row[] {
+  const derivePlatform = !hasField("Hardware");
   return Object.entries(data).map(([key, record]) => {
     const id = parseDeviceId(key);
-    return { key, device: id?.device ?? "—", port: id?.port ?? "—", ...record, ...splitCountry(record.Country) };
+    const values = Object.fromEntries(ROW_FIELDS.map((f) => [f, record[f] ?? "—"])) as DeviceRecord;
+    if (derivePlatform) values.Hardware = id?.suffix.split("-")[0] || "—";
+    const place = record.Country === undefined ? { country: "—", service: "—" } : splitCountry(record.Country);
+    return { key, device: id?.device ?? "—", port: id?.port ?? "—", ...values, ...place };
   });
 }
+
+const ROW_FIELDS = ["sprintNo", "Cver", "firmwareVersion", "appVersion", "Hardware", "Country"] as const;
 
 /** Returns a predicate for rows matching every non-empty filter and the free-text search. */
 export function rowMatcher(filters: Filters, query: string): (row: Row) => boolean {
@@ -70,8 +94,8 @@ export function rowMatcher(filters: Filters, query: string): (row: Row) => boole
   return (row) => {
     for (const [name, set] of sets) if (!set.has(row[name])) return false;
     if (!search) return true;
-    return [row.key, row.sprintNo, row.Cver, row.firmwareVersion, row.appVersion, row.Hardware, row.Country].some((v) =>
-      v.toLowerCase().includes(search),
+    return [row.key, row.sprintNo, row.Cver, row.firmwareVersion, row.appVersion, row.Hardware, row.Country].some(
+      (v) => v !== "—" && v.toLowerCase().includes(search),
     );
   };
 }
@@ -95,8 +119,8 @@ export function filterData(data: DeviceData, filters: Filters, query: string): D
   return result;
 }
 
-// Filters survive moving to the JSON page and back (per tab, like the view choice).
-const FILTER_STATE_KEY = "dim-device-filters";
+// Filters survive moving to the JSON page and back (per tab, like the view choice), per device family.
+const filterStateKey = () => `dim-device-filters${activeSchema().id === "stb" ? "" : `-${activeSchema().id}`}`;
 
 export interface FilterState {
   filters: Filters;
@@ -105,7 +129,7 @@ export interface FilterState {
 
 export function loadFilterState(): FilterState {
   try {
-    const raw = sessionStorage.getItem(FILTER_STATE_KEY);
+    const raw = sessionStorage.getItem(filterStateKey());
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<FilterState>;
       const filters = { ...EMPTY_FILTERS };
@@ -123,7 +147,7 @@ export function loadFilterState(): FilterState {
 
 export function saveFilterState(state: FilterState): void {
   try {
-    sessionStorage.setItem(FILTER_STATE_KEY, JSON.stringify(state));
+    sessionStorage.setItem(filterStateKey(), JSON.stringify(state));
   } catch {
     /* storage unavailable — filters just won't be remembered */
   }

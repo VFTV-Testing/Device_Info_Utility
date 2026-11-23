@@ -108,7 +108,7 @@ describe("EnvironmentService", () => {
     const store = new MemoryStore(null);
     const service = new EnvironmentService(store);
     await expect(service.addEntry(entry({ note: "  " }))).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
-    await expect(service.addEntry(entry({ port: "P1" }))).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+    await expect(service.addEntry(entry({ port: "SLOT1" }))).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
     await expect(service.addEntry(entry({ status: "broken" }))).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
     store.readOnly = true;
     await expect(service.addEntry(entry())).rejects.toMatchObject({ code: "READ_ONLY" });

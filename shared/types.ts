@@ -4,9 +4,10 @@
  * The file is a JSON object keyed by the complete device identifier, e.g.
  *   "X101-GER-PORT1-AVSB-FUT_EMMC_Rayson-DE_PROD-DVBC": { sprintNo, Cver, ... }
  *
- * Every record has exactly these six string properties — no more, no fewer.
+ * Every record has exactly its family's string properties — no more, no fewer. STB records
+ * use all six below; other device families use a subset (see shared/schema.ts).
  */
-export const RECORD_FIELDS = [
+export const ALL_RECORD_FIELDS = [
   "sprintNo",
   "Cver",
   "firmwareVersion",
@@ -15,7 +16,14 @@ export const RECORD_FIELDS = [
   "Country",
 ] as const;
 
-export type RecordField = (typeof RECORD_FIELDS)[number];
+export type RecordField = (typeof ALL_RECORD_FIELDS)[number];
+
+/**
+ * The fields of the device family currently open, in file order. This is a live list:
+ * setActiveSchema() (shared/schema.ts) refills it when the user switches family, so every
+ * validator, form and table that walks RECORD_FIELDS follows the open family automatically.
+ */
+export const RECORD_FIELDS: RecordField[] = [...ALL_RECORD_FIELDS];
 
 export type DeviceRecord = { [K in RecordField]: string };
 

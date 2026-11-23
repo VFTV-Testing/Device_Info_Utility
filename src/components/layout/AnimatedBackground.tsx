@@ -120,6 +120,11 @@ export function AnimatedBackground({ theme }: { scene: CanvasScene; theme: Theme
       raf = requestAnimationFrame(loop);
       const elapsed = now - last;
       if (elapsed < FRAME_MS - 2) return;
+      // Hold still while the page scrolls (see useScrollingFlag), so scrolling stays smooth.
+      if (document.documentElement.hasAttribute("data-scrolling")) {
+        last = now;
+        return;
+      }
       scene?.frame(Math.min(elapsed, 100));
       last = now;
     };

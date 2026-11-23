@@ -1,22 +1,28 @@
-import { useCallback, useMemo, useState } from "react";
+import { lazy, useCallback, useMemo, useState } from "react";
 import { createBrowserRouter, createHashRouter, Navigate, RouterProvider, type RouteObject } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
+import { setActiveSchema } from "../shared/schema";
 import { DATA_MODE, ENV_TARGET, GITHUB_TARGET } from "./config";
 import { AuthContext } from "./context/AuthContext";
 import { DeviceDataProvider, useDeviceData } from "./context/DeviceDataContext";
 import { EnvironmentProvider } from "./context/EnvironmentContext";
+import { FamilyContext, type FamilyValue } from "./context/FamilyContext";
+import { FAMILIES, readFamilyChoice, rememberFamily, type DeviceFamily } from "./families";
 import { ModeratorContext } from "./context/ModeratorContext";
 import { rememberViewMode, ViewModeContext, wantsViewMode } from "./context/ViewModeContext";
-import { AllDevicesPage } from "./pages/AllDevicesPage";
-import { DeviceManagerPage } from "./pages/DeviceManagerPage";
-import { EnvironmentPage } from "./pages/EnvironmentPage";
-import { JsonPreviewPage } from "./pages/JsonPreviewPage";
+import { FamilyPickerPage } from "./pages/FamilyPickerPage";
 import { SignInPage } from "./pages/SignInPage";
 import { api } from "./services/api";
 import { clearStoredToken, createDirectClient, type GitHubSession } from "./services/githubSession";
 import { createDirectEnvClient, createViewerEnvClient, serverEnvApi } from "./services/environmentClient";
 import { clearModerator, createModeratorEnvClient, readModerator, type ModeratorSession } from "./services/moderator";
 import { createViewerClient } from "./services/viewerClient";
+
+// Each page loads on first visit (its own file), so the first screen downloads less.
+const AllDevicesPage = lazy(() => import("./pages/AllDevicesPage").then((m) => ({ default: m.AllDevicesPage })));
+const DeviceManagerPage = lazy(() => import("./pages/DeviceManagerPage").then((m) => ({ default: m.DeviceManagerPage })));
+const EnvironmentPage = lazy(() => import("./pages/EnvironmentPage").then((m) => ({ default: m.EnvironmentPage })));
+const JsonPreviewPage = lazy(() => import("./pages/JsonPreviewPage").then((m) => ({ default: m.JsonPreviewPage })));
 
 /** View-only visitors have no editor, so the home page becomes All Devices for them. */
 function HomeRoute() {
@@ -55,19 +61,30 @@ function DirectApp() {
   const [session, setSession] = useState<GitHubSession | null>(null);
   const [viewOnly, setViewOnly] = useState(wantsViewMode);
   const [moderator, setModerator] = useState<ModeratorSession | null>(readModerator);
-  const client = useMemo(() => (session ? createDirectClient(GITHUB_TARGET, session) : null), [session]);
-  const viewerClient = useMemo(() => (viewOnly ? createViewerClient(GITHUB_TARGET) : null), [viewOnly]);
+  // Each device family is its own file; null until the user picks one (asked once, then remembered).
+  const [picked, setPicked] = useState<DeviceFamily | null>(readFamilyChoice);
+  const family = picked ?? FAMILIES[0]!;
+  // Open the family's fields and port format before anything below renders its records.
+  setActiveSchema(family);
+  const switchTo = useCallback((next: DeviceFamily) => {
+    rememberFamily(next);
+    setPicked(next);
+  }, []);
+  const familyValue = useMemo<FamilyValue>(() => ({ family, families: FAMILIES, switchTo }), [family, switchTo]);
+  const target = family.target;
+  const client = useMemo(() => (session ? createDirectClient(target, session) : null), [session, target]);
+  const viewerClient = useMemo(() => (viewOnly ? createViewerClient(target) : null), [viewOnly, target]);
   const envClient = useMemo(() => (session ? createDirectEnvClient(ENV_TARGET, session) : null), [session]);
   const viewerEnvClient = useMemo(() => (viewOnly ? createViewerEnvClient(ENV_TARGET) : null), [viewOnly]);
   // Moderators read devices like the view-only link (with their name on the config) and push Environment status via the helper.
   const moderatorClients = useMemo(() => {
     if (!moderator) return null;
-    const viewer = createViewerClient(GITHUB_TARGET);
+    const viewer = createViewerClient(target);
     return {
       devices: { ...viewer, getConfig: async () => ({ ...(await viewer.getConfig()), moderator: moderator.name }) },
       environment: createModeratorEnvClient(ENV_TARGET, moderator),
     };
-  }, [moderator]);
+  }, [moderator, target]);
   const signOutModerator = useCallback(() => {
     clearModerator();
     setModerator(null);
@@ -85,39 +102,50 @@ function DirectApp() {
     setViewOnly(false);
   }, []);
 
+  const signedIn = Boolean(session || moderator || viewOnly);
+  // First visit after signing in (or opening the view): ask which family to open.
+  if (signedIn && !picked) return <FamilyPickerPage families={FAMILIES} onPick={switchTo} />;
+
+  // The family is part of each provider key, so switching family starts from a clean slate.
   if (!session && moderator && moderatorClients) {
     return (
-      <ModeratorContext.Provider value={{ name: moderator.name, signOut: signOutModerator }}>
-        <DeviceDataProvider key={`moderator-${moderator.name}`} client={moderatorClients.devices}>
-          <EnvironmentProvider client={moderatorClients.environment}>
-            <RouterProvider router={getRouter()} />
-          </EnvironmentProvider>
-        </DeviceDataProvider>
-      </ModeratorContext.Provider>
+      <FamilyContext.Provider value={familyValue}>
+        <ModeratorContext.Provider value={{ name: moderator.name, signOut: signOutModerator }}>
+          <DeviceDataProvider key={`moderator-${moderator.name}-${family.id}`} client={moderatorClients.devices}>
+            <EnvironmentProvider client={moderatorClients.environment}>
+              <RouterProvider router={getRouter()} />
+            </EnvironmentProvider>
+          </DeviceDataProvider>
+        </ModeratorContext.Provider>
+      </FamilyContext.Provider>
     );
   }
   if (!session && viewOnly && viewerClient && viewerEnvClient) {
     return (
-      <ViewModeContext.Provider value={{ exit: exitViewOnly }}>
-        <DeviceDataProvider key="view-only" client={viewerClient}>
-          <EnvironmentProvider client={viewerEnvClient}>
-            <RouterProvider router={getRouter()} />
-          </EnvironmentProvider>
-        </DeviceDataProvider>
-      </ViewModeContext.Provider>
+      <FamilyContext.Provider value={familyValue}>
+        <ViewModeContext.Provider value={{ exit: exitViewOnly }}>
+          <DeviceDataProvider key={`view-only-${family.id}`} client={viewerClient}>
+            <EnvironmentProvider client={viewerEnvClient}>
+              <RouterProvider router={getRouter()} />
+            </EnvironmentProvider>
+          </DeviceDataProvider>
+        </ViewModeContext.Provider>
+      </FamilyContext.Provider>
     );
   }
   if (!session || !client || !envClient) {
     return <SignInPage target={GITHUB_TARGET} onSignedIn={setSession} onViewOnly={enterViewOnly} onModerator={setModerator} />;
   }
   return (
-    <AuthContext.Provider value={{ session, signOut }}>
-      <DeviceDataProvider key={session.login} client={client}>
-        <EnvironmentProvider key={session.login} client={envClient}>
-          <RouterProvider router={getRouter()} />
-        </EnvironmentProvider>
-      </DeviceDataProvider>
-    </AuthContext.Provider>
+    <FamilyContext.Provider value={familyValue}>
+      <AuthContext.Provider value={{ session, signOut }}>
+        <DeviceDataProvider key={`${session.login}-${family.id}`} client={client}>
+          <EnvironmentProvider key={session.login} client={envClient}>
+            <RouterProvider router={getRouter()} />
+          </EnvironmentProvider>
+        </DeviceDataProvider>
+      </AuthContext.Provider>
+    </FamilyContext.Provider>
   );
 }
 

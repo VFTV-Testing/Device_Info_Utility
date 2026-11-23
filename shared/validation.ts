@@ -1,4 +1,4 @@
-import { buildDeviceId, parseDeviceId, PORT_PATTERN, SEGMENT_PATTERN } from "./deviceId";
+import { buildDeviceId, containsPortSegment, defaultPortPrefix, parseDeviceId, PORT_PATTERN, SEGMENT_PATTERN } from "./deviceId";
 import { RECORD_FIELDS, type DeviceData, type DeviceRecord, type RecordField } from "./types";
 
 export const MAX_VALUE_LENGTH = 200;
@@ -31,11 +31,11 @@ export function validateRecordValues(values: Partial<Record<RecordField, unknown
 }
 
 /**
- * Structural check for one record: exactly the six properties, all strings.
+ * Structural check for one record: exactly the open family's properties, all strings.
  * Returns human-readable problems; empty array means valid.
  */
 export function validateRecordShape(value: unknown, label = "Record"): string[] {
-  if (!isPlainObject(value)) return [`${label}: must be an object with the six device properties`];
+  if (!isPlainObject(value)) return [`${label}: must be an object with the device properties`];
   const problems: string[] = [];
   for (const field of RECORD_FIELDS) {
     if (!(field in value)) problems.push(`${label}: missing property "${field}"`);
@@ -83,10 +83,10 @@ export function validateNewKeyParts(input: NewKeyInput, existing: DeviceData): K
 
   if (!device) errors.device = "Device is required";
   else if (!SEGMENT_PATTERN.test(device)) errors.device = "Use letters, digits, _ & . + separated by single hyphens";
-  else if (/-PORT\d+(-|$)/i.test(device)) errors.device = "Device must not contain a PORT segment";
+  else if (containsPortSegment(device)) errors.device = "Device must not contain a port segment";
 
   if (!port) errors.port = "Port is required";
-  else if (!PORT_PATTERN.test(port)) errors.port = "Port must look like PORT1, PORT2, …";
+  else if (!PORT_PATTERN.test(port)) errors.port = `Port must look like ${defaultPortPrefix()}1, ${defaultPortPrefix()}2, …`;
 
   if (!suffix) errors.suffix = "Remaining identifier segments are required";
   else if (!SEGMENT_PATTERN.test(suffix)) errors.suffix = "Use letters, digits, _ & . + separated by single hyphens";
@@ -105,7 +105,7 @@ export function validateNewKeyParts(input: NewKeyInput, existing: DeviceData): K
   return errors;
 }
 
-/** Copies only the six known fields, in canonical order. */
+/** Copies only the open family's fields, in canonical order. */
 export function pickRecord(values: Partial<Record<RecordField, string>>): DeviceRecord {
   const record = {} as DeviceRecord;
   for (const field of RECORD_FIELDS) record[field] = values[field] ?? "";

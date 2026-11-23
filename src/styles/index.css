@@ -178,6 +178,10 @@ body::before {
   animation: aurora-drift 28s ease-in-out infinite alternate;
   will-change: transform;
 }
+/* While the page scrolls, hold the glow still so the frosted panels are not re-blurred every frame. */
+html[data-scrolling] body::before {
+  animation-play-state: paused;
+}
 
 @keyframes aurora-drift {
   0% { transform: translate3d(0, 0, 0) scale(1); }
@@ -303,14 +307,14 @@ html.dark .bg-preview[data-preview="waves"]::after {
 @utility glass {
   background-color: var(--glass);
   border-color: var(--glass-border);
-  backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
 }
 
 /* For bars that float over scrolling content: frosted but mostly opaque, so text behind never shows through. */
 @utility glass-strong {
   background-color: color-mix(in srgb, var(--surface) 95%, transparent);
   border-color: var(--glass-border);
-  backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
 }
 
 @utility bg-primary-gradient {

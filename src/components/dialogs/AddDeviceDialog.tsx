@@ -2,7 +2,7 @@ import { fieldLabel } from "../../lib/fields";
 import { AlertTriangle, CheckCircle2, Copy, Plus } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { buildDeviceId, naturalCompare, normalizePort } from "../../../shared/deviceId";
+import { buildDeviceId, defaultPortPrefix, naturalCompare, normalizePort } from "../../../shared/deviceId";
 import { RECORD_FIELDS, type DeviceRecord, type RecordField } from "../../../shared/types";
 import { pickRecord, validateNewKeyParts, validateRecordValues } from "../../../shared/validation";
 import { useDeviceData } from "../../context/DeviceDataContext";
@@ -12,7 +12,8 @@ import { commitToast, FIELD_META, useFieldSuggestions } from "../device/RecordFo
 import { Dialog } from "../ui/Dialog";
 import { Button, FieldError, FieldLabel, Input, NativeSelect, Notice } from "../ui/primitives";
 
-const EMPTY_VALUES: DeviceRecord = pickRecord({});
+/** Blank values for the open family's fields (read when the dialog opens, after any family switch). */
+const emptyValues = (): DeviceRecord => pickRecord({});
 
 export interface AddDeviceDialogProps {
   open: boolean;
@@ -30,7 +31,7 @@ export function AddDeviceDialog({ open, onOpenChange, initialDevice, initialPort
   const [device, setDevice] = useState("");
   const [port, setPort] = useState("");
   const [suffix, setSuffix] = useState("");
-  const [values, setValues] = useState<DeviceRecord>(EMPTY_VALUES);
+  const [values, setValues] = useState<DeviceRecord>(emptyValues);
   const [template, setTemplate] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export function AddDeviceDialog({ open, onOpenChange, initialDevice, initialPort
     setDevice(initialDevice ?? "");
     setPort(initialPort ?? "");
     setSuffix("");
-    setValues(EMPTY_VALUES);
+    setValues(emptyValues());
     setTemplate("");
     setSubmitted(false);
     setServerError(null);
@@ -58,7 +59,7 @@ export function AddDeviceDialog({ open, onOpenChange, initialDevice, initialPort
   const fieldErrors = validateRecordValues(values);
   const keyValid = Object.keys(keyErrors).length === 0;
   const valid = keyValid && Object.keys(fieldErrors).length === 0;
-  const previewKey = buildDeviceId(device || "<device>", port || "PORT<n>", suffix || "<remaining-segments>");
+  const previewKey = buildDeviceId(device || "<device>", port || `${defaultPortPrefix()}<n>`, suffix || "<remaining-segments>");
 
   const applyTemplate = (key: string) => {
     setTemplate(key);
@@ -137,7 +138,7 @@ export function AddDeviceDialog({ open, onOpenChange, initialDevice, initialPort
                 id="new-port"
                 value={port}
                 autoComplete="off"
-                placeholder="PORT1"
+                placeholder={`${defaultPortPrefix()}1`}
                 invalid={Boolean(showKeyError("port"))}
                 onChange={(e) => setPort(e.target.value.trim().toUpperCase())}
                 onBlur={() => {

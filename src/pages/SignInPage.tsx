@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Cpu, Eye, KeyRound, Loader2, ShieldCheck, UserCheck, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { Activity, ArrowRight, ChevronRight, Cpu, Eye, GitBranch, KeyRound, Loader2, Lock, ShieldCheck, UserCheck, UserRound, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Button, FieldLabel, Input, Notice } from "../components/ui/primitives";
 import { OAUTH_ENABLED, type GitHubTarget } from "../config";
 import { useTheme } from "../hooks";
@@ -18,17 +18,13 @@ function GitHubMark({ className }: { className?: string }) {
   );
 }
 
-/** Moves the card's spotlight glow to the pointer (see .spotlight in index.css). */
-function trackSpotlight(event: MouseEvent<HTMLElement>) {
-  const rect = event.currentTarget.getBoundingClientRect();
-  event.currentTarget.style.setProperty("--mx", `${event.clientX - rect.left}px`);
-  event.currentTarget.style.setProperty("--my", `${event.clientY - rect.top}px`);
-}
-
 interface ChoiceProps {
   index: number;
   icon: ReactNode;
-  iconClass: string;
+  /** Colour scheme of the 3D card (see .si-* in styles/cards.css). */
+  tone: "github" | "moderator" | "view";
+  /** Small icons that pop forward when the card tilts. */
+  tags: ReactNode[];
   who: string;
   title: string;
   description: string;
@@ -40,8 +36,12 @@ interface ChoiceProps {
   onClick: () => void;
 }
 
-/** One sign-in choice: a whole-card button with lift, glow and a staggered entrance. */
-function Choice({ index, icon, iconClass, who, title, description, action, ariaLabel, active, busy, disabled, onClick }: ChoiceProps) {
+/**
+ * One sign-in choice: a 3D glass card that tilts on hover or keyboard focus while its
+ * bubbles rise around the icon. Adapted from Uiverse.io by Smit-Prajapati -
+ * https://uiverse.io/Smit-Prajapati/smart-liger-5 (MIT License, Copyright (c) Smit-Prajapati (Smit Prajapati)).
+ */
+function Choice({ index, icon, tone, tags, who, title, description, action, ariaLabel, active, busy, disabled, onClick }: ChoiceProps) {
   return (
     <motion.button
       type="button"
@@ -49,30 +49,39 @@ function Choice({ index, icon, iconClass, who, title, description, action, ariaL
       aria-pressed={active}
       disabled={disabled || busy}
       onClick={onClick}
-      onMouseMove={trackSpotlight}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.08 + index * 0.07, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      whileHover={disabled ? undefined : { y: -5 }}
-      whileTap={disabled ? undefined : { scale: 0.985 }}
-      className={cn(
-        "glass spotlight group flex h-full flex-col gap-4 rounded-3xl border p-5 text-left shadow-card transition-[border-color,box-shadow]",
-        "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-55",
-        active ? "border-accent shadow-[0_14px_40px_var(--primary-glow)] ring-2 ring-accent/40" : "hover:border-accent/40 hover:shadow-[0_14px_40px_var(--primary-glow)]",
-      )}
+      className={cn("si-parent", `si-${tone}`)}
     >
-      <span className={cn("grid size-12 place-items-center rounded-2xl text-white shadow-card transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3", iconClass)}>
-        {icon}
-      </span>
-      <span className="grid gap-1">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">{who}</span>
-        <span className="font-display text-lg font-bold text-fg">{title}</span>
-        <span className="text-[13px] leading-relaxed text-fg-muted">{description}</span>
-      </span>
-      <span className="mt-auto inline-flex items-center gap-1.5 text-sm font-semibold text-accent">
-        {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-        {action}
-        <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
+      <span className="si-card block">
+        <span className="si-logo" aria-hidden>
+          <span className="si-circle si-c1" />
+          <span className="si-circle si-c2" />
+          <span className="si-circle si-c3" />
+          <span className="si-circle si-c4" />
+          <span className="si-circle si-c5">{icon}</span>
+        </span>
+        <span className="si-glass" aria-hidden />
+        <span className="si-content block">
+          <span className="si-who">{who}</span>
+          <span className="si-title">{title}</span>
+          <span className="si-text">{description}</span>
+        </span>
+        <span className="si-bottom">
+          <span className="si-tags" aria-hidden>
+            {tags.map((tag, i) => (
+              <span key={i} className="si-tag">
+                {tag}
+              </span>
+            ))}
+          </span>
+          <span className="si-go">
+            {busy && <Loader2 className="size-4 animate-spin" aria-hidden />}
+            {action}
+            <ChevronRight className="size-4" strokeWidth={3} aria-hidden />
+          </span>
+        </span>
       </span>
     </motion.button>
   );
@@ -180,13 +189,14 @@ export function SignInPage({
       key: "github",
       show: true,
       icon: <GitHubMark className="size-6" />,
-      iconClass: "bg-[linear-gradient(135deg,#24292f,#4b5563)]",
+      tone: "github" as const,
+      tags: [<Cpu key="d" className="size-4" />, <Activity key="e" className="size-4" />, <GitBranch key="c" className="size-4" />],
       who: "Team",
       title: "Sign in with GitHub",
       description: githubEnabled
         ? "Edit devices and the environment. Changes are committed under your name."
         : "GitHub sign-in is not set up for this site.",
-      action: "Continue with GitHub",
+      action: "Continue",
       ariaLabel: "Sign in with GitHub",
       busy: githubBusy,
       disabled: !githubEnabled,
@@ -196,7 +206,8 @@ export function SignInPage({
       key: "moderator",
       show: showModerator,
       icon: <KeyRound className="size-6" />,
-      iconClass: "bg-primary-gradient",
+      tone: "moderator" as const,
+      tags: [<Activity key="e" className="size-4" />, <UserRound key="n" className="size-4" />],
       who: "Moderators",
       title: "Moderator pass key",
       description: "No GitHub account needed. Update the Environment status with the pass key.",
@@ -209,7 +220,8 @@ export function SignInPage({
       key: "view",
       show: Boolean(onViewOnly),
       icon: <Eye className="size-6" />,
-      iconClass: "bg-[linear-gradient(135deg,#0891b2,#22d3ee)]",
+      tone: "view" as const,
+      tags: [<Lock key="r" className="size-4" />],
       who: "Everyone",
       title: "View only",
       description: "No account needed. Browse every robot, device and environment status — read only.",
@@ -245,7 +257,7 @@ export function SignInPage({
           </Notice>
         )}
 
-        <div className={cn("grid grid-cols-1 gap-4", choices.length === 3 ? "md:grid-cols-3" : choices.length === 2 ? "md:grid-cols-2" : "")}>
+        <div className={cn("grid grid-cols-1 gap-6", choices.length === 3 ? "md:grid-cols-3" : choices.length === 2 ? "md:grid-cols-2" : "")}>
           {choices.map(({ key, show: _show, ...props }, i) => (
             <Choice key={key} index={i} {...props} />
           ))}

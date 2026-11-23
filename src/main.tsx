@@ -5,6 +5,7 @@ import "@fontsource-variable/space-grotesk";
 import "@fontsource-variable/jetbrains-mono";
 import { App } from "./App";
 import "./styles/index.css";
+import "./styles/cards.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

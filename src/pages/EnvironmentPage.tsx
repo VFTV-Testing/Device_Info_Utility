@@ -22,6 +22,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { naturalCompare } from "../../shared/deviceId";
+import { activeSchema, hasField } from "../../shared/schema";
 import {
   ENV_CATEGORIES,
   ENV_CATEGORY_LABELS,
@@ -207,7 +208,13 @@ export function EnvironmentPage() {
       if (!existing.services.includes(row.service)) existing.services.push(row.service);
       map.set(id, existing);
     }
-    const extra = [doc?.ports ?? {}, doc?.setup ?? {}].flatMap((m) => Object.entries(m).flatMap(([robot, byPort]) => Object.keys(byPort).map((port) => [robot, port] as const)));
+    // The environment file is shared by every device family. Show only this family's robots;
+    // STB (the original family) also keeps ports whose robot is no longer in any device file.
+    const familyRobots = new Set([...map.values()].map((p) => p.robot));
+    const keepUnknownRobots = activeSchema().id === "stb";
+    const extra = [doc?.ports ?? {}, doc?.setup ?? {}]
+      .flatMap((m) => Object.entries(m).flatMap(([robot, byPort]) => Object.keys(byPort).map((port) => [robot, port] as const)))
+      .filter(([robot]) => keepUnknownRobots || familyRobots.has(robot));
     for (const p of Object.values(pending)) extra.push([p.robot, p.port]);
     for (const [robot, port] of extra) {
       const id = pendingId(robot, port);
@@ -330,35 +337,37 @@ export function EnvironmentPage() {
           </Notice>
         )}
 
-        {/* Environment = the one main filter */}
-        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Environment">
-          {[{ code: "all", total: ports.length, problems: 0 }, ...environments].map((e) => {
-            const active = envFilter === e.code;
-            const problems = e.code === "all" ? ports.filter((p) => PROBLEM.includes(p.state)).length : e.problems;
-            return (
-              <button
-                key={e.code}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setEnvFilter(e.code)}
-                title={COUNTRY_NAMES[e.code]}
-                className={cn(
-                  "inline-flex h-9 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition",
-                  active ? "border-transparent bg-primary-gradient text-white shadow-card" : "glass text-fg hover:border-accent/40",
-                )}
-              >
-                {e.code === "all" ? "All environments" : e.code}
-                <span className={cn("text-xs", active ? "text-white/80" : "text-fg-muted")}>{e.total}</span>
-                {problems > 0 && (
-                  <span className={cn("rounded-full px-1.5 text-[11px] font-bold", active ? "bg-white/25 text-white" : "bg-warning-soft text-warning")}>
-                    {problems}⚠
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        {/* Environment = the one main filter (families without a Country field have no environments) */}
+        {hasField("Country") && (
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Environment">
+            {[{ code: "all", total: ports.length, problems: 0 }, ...environments].map((e) => {
+              const active = envFilter === e.code;
+              const problems = e.code === "all" ? ports.filter((p) => PROBLEM.includes(p.state)).length : e.problems;
+              return (
+                <button
+                  key={e.code}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setEnvFilter(e.code)}
+                  title={COUNTRY_NAMES[e.code]}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition",
+                    active ? "border-transparent bg-primary-gradient text-white shadow-card" : "glass text-fg hover:border-accent/40",
+                  )}
+                >
+                  {e.code === "all" ? "All environments" : e.code}
+                  <span className={cn("text-xs", active ? "text-white/80" : "text-fg-muted")}>{e.total}</span>
+                  {problems > 0 && (
+                    <span className={cn("rounded-full px-1.5 text-[11px] font-bold", active ? "bg-white/25 text-white" : "bg-warning-soft text-warning")}>
+                      {problems}⚠
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Status tiles double as the status filter */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="radiogroup" aria-label="Status">

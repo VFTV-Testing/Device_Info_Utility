@@ -25,6 +25,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { naturalCompare } from "../../shared/deviceId";
 import type { DeviceRecord } from "../../shared/types";
+import { hasField } from "../../shared/schema";
 import { pickRecord } from "../../shared/validation";
 import { DataStateGate } from "../components/common/DataStateGate";
 import { BulkEditForm } from "../components/device/BulkEditForm";
@@ -39,6 +40,7 @@ import { useDebouncedValue } from "../hooks";
 import { cn } from "../lib/cn";
 import { chipStyle, hardwareTones, toneOf } from "../lib/hardware";
 import {
+  availableFilters,
   buildRows,
   COUNTRY_NAMES,
   describeFilters,
@@ -69,7 +71,14 @@ const COLUMNS: { id: SortColumn; label: string; className?: string }[] = [
   { id: "Hardware", label: "Platform" },
   { id: "Country", label: "Country" },
 ];
+/** Table columns for the open device family (Platform is always shown; it may come from the identifier). */
+function familyColumns() {
+  return COLUMNS.filter((c) => c.id === "device" || c.id === "port" || c.id === "key" || c.id === "Hardware" || hasField(c.id));
+}
+const MONO_COLUMNS = new Set<SortColumn>(["sprintNo", "Cver", "firmwareVersion", "appVersion"]);
 const PAGE_SIZES = [10, 25, 50, 100];
+/** The platform bars and the count start once the page has settled in (seconds). */
+const ENTRANCE_DELAY = 0.3;
 /** A port tile's content: a button that opens the editor, or plain content for view-only visitors. */
 function TileBody({
   editable,
@@ -99,25 +108,34 @@ function trackSpotlight(event: MouseEvent<HTMLElement>) {
   event.currentTarget.style.setProperty("--my", `${event.clientY - rect.top}px`);
 }
 
-/** Counts up to `target` once, for the hero number. Instant when reduced motion is requested. */
+/**
+ * Counts up to `target` for the hero number: from 0 each time the page opens, then from the
+ * number on screen when filters change. Instant when reduced motion is requested.
+ */
 function useCountUp(target: number): number {
-  const [value, setValue] = useState(target);
-  const from = useRef(0);
+  const reduce = typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  const [value, setValue] = useState(reduce ? target : 0);
+  // Animate from what is shown, not from a remembered target, so React StrictMode's double effect still counts.
+  const shown = useRef(reduce ? target : 0);
+  const mountedAt = useRef(performance.now());
   useEffect(() => {
-    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (reduce) {
+      shown.current = target;
       setValue(target);
-      from.current = target;
       return;
     }
-    const controls = animate(from.current, target, {
+    const controls = animate(shown.current, target, {
+      // On opening, wait until the page has settled in; filter changes count at once.
+      delay: performance.now() - mountedAt.current < 500 ? ENTRANCE_DELAY : 0,
       duration: 0.9,
       ease: [0.16, 1, 0.3, 1],
-      onUpdate: (v) => setValue(Math.round(v)),
+      onUpdate: (v) => {
+        shown.current = v;
+        setValue(Math.round(v));
+      },
     });
-    from.current = target;
     return () => controls.stop();
-  }, [target]);
+  }, [target, reduce]);
   return value;
 }
 const VIEW_KEY = "dim-devices-view";
@@ -164,6 +182,16 @@ export function AllDevicesPage() {
   };
 
   const rows = useMemo<Row[]>(() => buildRows(snapshot?.data ?? {}), [snapshot]);
+  // The platform bars wait for the page to settle only on first load; filter changes animate at once.
+  const [barDelay, setBarDelay] = useState(ENTRANCE_DELAY);
+  useEffect(() => {
+    const id = window.setTimeout(() => setBarDelay(0), 1500);
+    return () => window.clearTimeout(id);
+  }, []);
+  // The open family decides which fields exist (fixed while this page is mounted).
+  const [filterNames] = useState(availableFilters);
+  const [columns] = useState(familyColumns);
+  const showCountry = hasField("Country");
 
   const options = useMemo(
     () => Object.fromEntries(FILTER_NAMES.map((n) => [n, uniqueSorted(rows.map((r) => r[n]))])) as Record<FilterName, string[]>,
@@ -324,7 +352,7 @@ export function AllDevicesPage() {
                     [summary.services.length, "stream type", "stream types", summary.services.join(", ")],
                     [summary.sprints.length, "sprint build", "sprint builds", summary.sprints.join(", ")],
                   ] as const
-                ).map(([n, one, many, detail]) => (
+                ).filter(([, , many]) => showCountry || (many !== "countries" && many !== "stream types")).map(([n, one, many, detail]) => (
                   <span
                     key={many}
                     title={detail || undefined}
@@ -380,7 +408,7 @@ export function AllDevicesPage() {
                       onClick={() => toggleHardware(hw)}
                       initial={{ width: 0 }}
                       animate={{ width: `${(count / Math.max(filtered.length, 1)) * 100}%` }}
-                      transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                      transition={{ delay: barDelay, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                       className={cn("h-full min-w-1.5 transition-opacity hover:opacity-80", !on && "opacity-25")}
                       style={{ backgroundColor: toneOf(tones, hw).solid }}
                     />
@@ -472,7 +500,7 @@ export function AllDevicesPage() {
             <span className="mr-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
               <SlidersHorizontal className="size-3.5" aria-hidden /> Filters
             </span>
-            {FILTER_NAMES.map((name) => (
+            {filterNames.map((name) => (
               <MultiSelect
                 key={name}
                 variant="chip"
@@ -545,17 +573,26 @@ export function AllDevicesPage() {
                             <span className="mt-0.5 block truncate text-[13px] font-bold" style={{ color: tone.fg }}>
                               {row.Hardware}
                             </span>
-                            <span
-                              className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted"
-                              title={`firmwareVersion: ${row.firmwareVersion}`}
-                            >
-                              fw {row.firmwareVersion}
-                            </span>
-                            <span className="block truncate font-mono text-[10px] text-fg-muted" title={`appVersion: ${row.appVersion}`}>
-                              app {row.appVersion}
-                            </span>
+                            {hasField("firmwareVersion") && (
+                              <span
+                                className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted"
+                                title={`firmwareVersion: ${row.firmwareVersion}`}
+                              >
+                                fw {row.firmwareVersion}
+                              </span>
+                            )}
+                            {hasField("appVersion") && (
+                              <span className="block truncate font-mono text-[10px] text-fg-muted" title={`appVersion: ${row.appVersion}`}>
+                                app {row.appVersion}
+                              </span>
+                            )}
+                            {!hasField("appVersion") && !hasField("firmwareVersion") && (
+                              <span className="block truncate font-mono text-[10px] text-fg-muted" title={`sprintNo: ${row.sprintNo}`}>
+                                sprint {row.sprintNo}
+                              </span>
+                            )}
                             <span className="flex items-center justify-between gap-1 text-[10px] text-fg-subtle">
-                              <span className="truncate">{row.Country}</span>
+                              <span className="truncate">{showCountry ? row.Country : row.sprintNo}</span>
                               {canEdit && (
                                 <Pencil className="size-3 shrink-0 opacity-0 transition-opacity group-hover/tile:opacity-100" aria-hidden />
                               )}
@@ -613,7 +650,7 @@ export function AllDevicesPage() {
                         />
                       </th>
                     )}
-                    {COLUMNS.map((col) => {
+                    {columns.map((col) => {
                       const active = sort.column === col.id;
                       const Icon = active ? (sort.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
                       return (
@@ -656,19 +693,25 @@ export function AllDevicesPage() {
                             />
                           </td>
                         )}
-                        <td className="whitespace-nowrap px-3 py-2.5 font-semibold">{row.device}</td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{row.port}</td>
-                        <td className="break-all px-3 py-2.5 font-mono text-xs text-fg-muted">{row.key}</td>
-                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs">{row.sprintNo}</td>
-                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs">{row.Cver}</td>
-                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs">{row.firmwareVersion}</td>
-                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs">{row.appVersion}</td>
-                        <td className="whitespace-nowrap px-3 py-2.5">
-                          <span className="rounded-full px-2.5 py-0.5 text-xs font-medium" style={chipStyle(tones.get(row.Hardware))}>
-                            {row.Hardware}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{row.Country}</td>
+                        {columns.map(({ id }) =>
+                          id === "device" ? (
+                            <td key={id} className="whitespace-nowrap px-3 py-2.5 font-semibold">{row.device}</td>
+                          ) : id === "port" ? (
+                            <td key={id} className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{row.port}</td>
+                          ) : id === "key" ? (
+                            <td key={id} className="break-all px-3 py-2.5 font-mono text-xs text-fg-muted">{row.key}</td>
+                          ) : id === "Hardware" ? (
+                            <td key={id} className="whitespace-nowrap px-3 py-2.5">
+                              <span className="rounded-full px-2.5 py-0.5 text-xs font-medium" style={chipStyle(tones.get(row.Hardware))}>
+                                {row.Hardware}
+                              </span>
+                            </td>
+                          ) : (
+                            <td key={id} className={cn("whitespace-nowrap px-3 py-2.5", MONO_COLUMNS.has(id) ? "font-mono text-xs" : "text-fg-muted")}>
+                              {row[id]}
+                            </td>
+                          ),
+                        )}
                         {canEdit && (
                           <td className="whitespace-nowrap px-3 py-2.5 text-right">
                             <div className="inline-flex gap-1">
