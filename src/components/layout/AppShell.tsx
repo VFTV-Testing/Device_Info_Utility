@@ -56,16 +56,20 @@ function useScrollingFlag(idleMs = 160) {
   }, [idleMs]);
 }
 
-/** Where the welcome message goes: just below the header, however tall it is (it wraps on narrow screens). */
-function useHeaderBottom(header: RefObject<HTMLElement | null>, gap = 10): number {
+/**
+ * Where the welcome message goes: just below the header bar, however tall it is (it wraps on
+ * narrow screens). Measured from the bar itself, not the header's outer padding, so it sits close.
+ */
+function useHeaderBottom(header: RefObject<HTMLElement | null>, gap = 6): number {
   const [bottom, setBottom] = useState(84);
   useEffect(() => {
     const el = header.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const measure = () => setBottom(Math.round(el.getBoundingClientRect().height) + gap);
+    const bar = el.firstElementChild ?? el;
+    const measure = () => setBottom(Math.round(bar.getBoundingClientRect().height + bar.getBoundingClientRect().top - el.getBoundingClientRect().top) + gap);
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(el);
+    observer.observe(bar);
     return () => observer.disconnect();
   }, [header, gap]);
   return bottom;
