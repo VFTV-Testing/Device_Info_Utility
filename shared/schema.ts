@@ -12,6 +12,10 @@ export interface FamilySchema {
   fields: readonly RecordField[];
   /** Port spellings, e.g. ["PORT"] or ["P", "PORT"]; the first is used for new devices. */
   portPrefixes: readonly string[];
+  /** What the platform column is called, e.g. "OS" for Smart TV (FireOS, Tizen…). Default "Platform". */
+  platformLabel?: string;
+  /** Mobile: the last identifier segment says what kind of device it is (…-TABLET, …-SMARTPHONE). */
+  deviceKindFromKey?: boolean;
 }
 
 /** The original STB family: all six fields, ports written PORT1, PORT2, … */
@@ -32,6 +36,11 @@ export function setActiveSchema(schema: FamilySchema): void {
 
 export function activeSchema(): FamilySchema {
   return active;
+}
+
+/** The open family's name for the platform column: "Platform", or e.g. "OS". */
+export function platformLabel(): string {
+  return active.platformLabel ?? "Platform";
 }
 
 /** True when the open family's records have this field. */

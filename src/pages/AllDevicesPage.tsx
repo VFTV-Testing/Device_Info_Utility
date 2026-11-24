@@ -16,7 +16,9 @@ import {
   Rows3,
   Search,
   SlidersHorizontal,
+  Smartphone,
   Sparkles,
+  Tablet,
   Trash2,
   X,
 } from "lucide-react";
@@ -25,7 +27,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { naturalCompare } from "../../shared/deviceId";
 import type { DeviceRecord } from "../../shared/types";
-import { hasField } from "../../shared/schema";
+import { hasField, platformLabel } from "../../shared/schema";
 import { pickRecord } from "../../shared/validation";
 import { DataStateGate } from "../components/common/DataStateGate";
 import { BulkEditForm } from "../components/device/BulkEditForm";
@@ -73,7 +75,7 @@ const COLUMNS: { id: SortColumn; label: string; className?: string }[] = [
 ];
 /** Table columns for the open device family (Platform is always shown; it may come from the identifier). */
 function familyColumns() {
-  return COLUMNS.filter((c) => c.id === "device" || c.id === "port" || c.id === "key" || c.id === "Hardware" || hasField(c.id));
+  return COLUMNS.map((c) => (c.id === "Hardware" ? { ...c, label: platformLabel() } : c)).filter((c) => c.id === "device" || c.id === "port" || c.id === "key" || c.id === "Hardware" || hasField(c.id));
 }
 const MONO_COLUMNS = new Set<SortColumn>(["sprintNo", "Cver", "firmwareVersion", "appVersion"]);
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -192,6 +194,8 @@ export function AllDevicesPage() {
   const [filterNames] = useState(availableFilters);
   const [columns] = useState(familyColumns);
   const showCountry = hasField("Country");
+  // "4 platforms" for STB and Mobile, "4 OS" for Smart TV.
+  const platformWord = platformLabel() === "Platform" ? { one: "platform", many: "platforms" } : { one: platformLabel(), many: platformLabel() };
 
   const options = useMemo(
     () => Object.fromEntries(FILTER_NAMES.map((n) => [n, uniqueSorted(rows.map((r) => r[n]))])) as Record<FilterName, string[]>,
@@ -347,7 +351,7 @@ export function AllDevicesPage() {
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {(
                   [
-                    [summary.platforms.length, "platform", "platforms", summary.platforms.join(", ")],
+                    [summary.platforms.length, platformWord.one, platformWord.many, summary.platforms.join(", ")],
                     [summary.countries.length, "country", "countries", summary.countries.map((c) => COUNTRY_NAMES[c] ?? c).join(", ")],
                     [summary.services.length, "stream type", "stream types", summary.services.join(", ")],
                     [summary.sprints.length, "sprint build", "sprint builds", summary.sprints.join(", ")],
@@ -391,10 +395,10 @@ export function AllDevicesPage() {
 
           <Card className="spotlight p-6" onMouseMove={trackSpotlight}>
             <div className="flex items-baseline justify-between">
-              <p className="font-display text-base font-semibold text-fg">Platform mix</p>
+              <p className="font-display text-base font-semibold text-fg">{platformLabel()} mix</p>
               <p className="text-xs text-fg-muted">{isFiltered ? `For ${filtered.length} filtered records · click to filter` : "Click to filter"}</p>
             </div>
-            <div className="mt-4 flex h-3.5 gap-[3px] overflow-hidden rounded-full" role="group" aria-label="Platform mix">
+            <div className="mt-4 flex h-3.5 gap-[3px] overflow-hidden rounded-full" role="group" aria-label={`${platformLabel()} mix`}>
               {hardwareMix
                 .filter(({ count }) => count > 0)
                 .map(({ hw, count }) => {
@@ -573,6 +577,12 @@ export function AllDevicesPage() {
                             <span className="mt-0.5 block truncate text-[13px] font-bold" style={{ color: tone.fg }}>
                               {row.Hardware}
                             </span>
+                            {row.kind && (
+                              <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold text-fg-muted">
+                                {row.kind === "Tablet" ? <Tablet className="size-3" aria-hidden /> : <Smartphone className="size-3" aria-hidden />}
+                                {row.kind}
+                              </span>
+                            )}
                             {/* fw only when the family has it and it is filled in (Smart TV firmware is often still empty). */}
                             {hasField("firmwareVersion") && row.firmwareVersion !== "" && row.firmwareVersion !== "—" && (
                               <span

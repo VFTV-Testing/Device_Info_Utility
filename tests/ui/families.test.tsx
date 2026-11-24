@@ -26,8 +26,8 @@ const MOBILE_DATA = {
 } as unknown as DeviceData;
 
 const TV_DATA = {
-  "X122-P1-FireOS-Amazon-AFTGAZL-LE": { sprintNo: "1.17.0.0", Cver: "1.17.0.0", firmwareVersion: "" },
-  "X123-P1-WebOS-LG-43QNED776RB-LE": { sprintNo: "R8.3", Cver: "8.3", firmwareVersion: "" },
+  "X122-P1-FireOS-Amazon-AFTGAZL-LE": { sprintNo: "1.17.0.0", firmwareVersion: "", appVersion: "1.17.0.0" },
+  "X123-P1-WebOS-LG-43QNED776RB-LE": { sprintNo: "R8.3", firmwareVersion: "", appVersion: "8.3" },
 } as unknown as DeviceData;
 
 afterEach(() => {
@@ -66,7 +66,8 @@ describe("device family rules", () => {
     setActiveSchema(mobile);
     const rows = buildRows(MOBILE_DATA);
     expect(rows.map((r) => r.Hardware)).toEqual(["ANDROID", "iOS"]);
-    expect(rows[0]).toMatchObject({ device: "X103-GER", port: "PORT1", firmwareVersion: "—", country: "—" });
+    expect(rows[0]).toMatchObject({ device: "X103-GER", port: "PORT1", firmwareVersion: "—", country: "—", kind: "Tablet" });
+    expect(rows[1]!.kind).toBe("Phone");
   });
 
   it("opens the family named in a shared link, else the remembered one", () => {
@@ -111,13 +112,14 @@ describe("All Devices per family", () => {
     expect(within(screen.getByRole("table")).getByText("ANDROID")).toBeInTheDocument();
   });
 
-  it("shows Smart TV firmware but no appVersion", async () => {
+  it("shows Smart TV firmware and appVersion but no Cver", async () => {
     renderFamily(smartTv, TV_DATA);
     const user = userEvent.setup();
     await user.click(await screen.findByRole("radio", { name: "Table" }));
     const headers = (await screen.findAllByRole("columnheader")).map((h) => h.textContent);
     expect(headers).toContain("firmwareVersion");
-    expect(headers).not.toContain("appVersion");
+    expect(headers).toContain("appVersion");
+    expect(headers).not.toContain("Cver");
     expect(within(screen.getByRole("table")).getByText("X122")).toBeInTheDocument();
     expect(within(screen.getByRole("table")).getAllByText("P1")).toHaveLength(2);
   });
@@ -157,5 +159,14 @@ describe("Environment per family", () => {
     expect(screen.getByText("X110-GER")).toBeInTheDocument();
     expect(screen.queryByText("X117-AL")).not.toBeInTheDocument();
     expect(screen.queryByRole("radiogroup", { name: "Environment" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Smart TV wording", () => {
+  it("calls the platform OS", async () => {
+    renderFamily(smartTv, TV_DATA);
+    expect(await screen.findByText("OS mix")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Filter by OS" })).toBeInTheDocument();
+    expect(screen.queryByText("Platform mix")).not.toBeInTheDocument();
   });
 });

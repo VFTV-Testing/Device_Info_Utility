@@ -30,6 +30,8 @@ export const ALL_FAMILIES: DeviceFamily[] = [
     tone: "mobile",
     fields: ["sprintNo", "Cver", "appVersion"],
     portPrefixes: ["PORT"],
+    // X103-GER-PORT1-ANDROID-TABLET → Tablet, X110-GER-PORT3-iOS-SMARTPHONE → Phone (shown on the cards).
+    deviceKindFromKey: true,
     target: { ...GITHUB_TARGET, filePath: "Mobile_Configs/deviceInformation.json" },
   },
   {
@@ -37,7 +39,9 @@ export const ALL_FAMILIES: DeviceFamily[] = [
     label: "Smart TV",
     description: "Smart TVs and streaming sticks",
     tone: "tv",
-    fields: ["sprintNo", "Cver", "firmwareVersion"],
+    fields: ["sprintNo", "firmwareVersion", "appVersion"],
+    // Android, FireOS, Tizen, WebOS… are operating systems, so the platform column is called OS.
+    platformLabel: "OS",
     // TV identifiers are written X122-P1-…
     portPrefixes: ["P"],
     target: { ...GITHUB_TARGET, filePath: "SmartTV_Configs/deviceInformation.json" },

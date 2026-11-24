@@ -1,5 +1,5 @@
 import { parseDeviceId } from "../../shared/deviceId";
-import { activeSchema, hasField } from "../../shared/schema";
+import { activeSchema, hasField, platformLabel } from "../../shared/schema";
 import type { DeviceData, DeviceRecord } from "../../shared/types";
 
 /**
@@ -16,6 +16,16 @@ export interface Row extends DeviceRecord {
   country: string;
   /** Stream type from the Country field, e.g. "DVBC" from "DE_DVBC". */
   service: string;
+  /** Mobile only: "Tablet" or "Phone", from the end of the identifier ("" for other families). */
+  kind: string;
+}
+
+const KIND_NAMES: Record<string, string> = { TABLET: "Tablet", SMARTPHONE: "Phone", PHONE: "Phone" };
+
+/** "…-ANDROID-TABLET" → "Tablet"; "…-iOS-SMARTPHONE" → "Phone"; other endings are shown as written. */
+export function deviceKind(suffix: string): string {
+  const last = suffix.split("-").pop() ?? "";
+  return KIND_NAMES[last.toUpperCase()] ?? last;
 }
 
 export type FilterName = "device" | "Hardware" | "country" | "service" | "sprintNo" | "appVersion" | "firmwareVersion";
@@ -23,7 +33,10 @@ export type Filters = Record<FilterName, string[]>;
 
 export const FILTER_LABELS: Record<FilterName, string> = {
   device: "Robot",
-  Hardware: "Platform",
+  // Follows the open family ("OS" for Smart TV).
+  get Hardware() {
+    return platformLabel();
+  },
   country: "Country",
   service: "Stream type",
   sprintNo: "sprintNo",
@@ -76,12 +89,14 @@ export function splitCountry(value: string): { country: string; service: string 
  */
 export function buildRows(data: DeviceData): Row[] {
   const derivePlatform = !hasField("Hardware");
+  const withKind = Boolean(activeSchema().deviceKindFromKey);
   return Object.entries(data).map(([key, record]) => {
     const id = parseDeviceId(key);
     const values = Object.fromEntries(ROW_FIELDS.map((f) => [f, record[f] ?? "—"])) as DeviceRecord;
     if (derivePlatform) values.Hardware = id?.suffix.split("-")[0] || "—";
     const place = record.Country === undefined ? { country: "—", service: "—" } : splitCountry(record.Country);
-    return { key, device: id?.device ?? "—", port: id?.port ?? "—", ...values, ...place };
+    const kind = withKind && id ? deviceKind(id.suffix) : "";
+    return { key, device: id?.device ?? "—", port: id?.port ?? "—", ...values, ...place, kind };
   });
 }
 

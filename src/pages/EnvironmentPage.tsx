@@ -22,7 +22,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { naturalCompare } from "../../shared/deviceId";
-import { activeSchema, hasField } from "../../shared/schema";
+import { activeSchema, hasField, platformLabel } from "../../shared/schema";
 import {
   ENV_CATEGORIES,
   ENV_CATEGORY_LABELS,
@@ -494,7 +494,7 @@ export function EnvironmentPage() {
               <table className="w-full min-w-[1150px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-fg-muted">
-                    {["Robot", "Device port", "Platform", "Stream type", "Setup", "Status", "Issue type", "Issues", "Updated", ""].map((h) => (
+                    {["Robot", "Device port", platformLabel(), "Stream type", "Setup", "Status", "Issue type", "Issues", "Updated", ""].map((h) => (
                       <th key={h} scope="col" className="px-3 py-3 font-medium">
                         {h}
                       </th>
