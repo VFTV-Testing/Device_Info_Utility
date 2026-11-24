@@ -37,6 +37,7 @@ import { ImportDialog } from "../components/dialogs/ImportDialog";
 import { ConfirmDialog, Dialog } from "../components/ui/Dialog";
 import { MultiSelect } from "../components/ui/MultiSelect";
 import { Button, Card, EmptyState, Input, NativeSelect } from "../components/ui/primitives";
+import { AtpBadge } from "../components/device/AtpBadge";
 import { useDeviceData } from "../context/DeviceDataContext";
 import { useDebouncedValue } from "../hooks";
 import { cn } from "../lib/cn";
@@ -573,7 +574,10 @@ export function AllDevicesPage() {
                           title={row.key}
                         >
                           <TileBody editable={canEdit} onClick={() => edit(row)} disabled={row.device === "—"} label={`Edit ${row.key}`}>
-                            <span className="block text-[11px] font-semibold text-fg-muted">{row.port}</span>
+                            <span className="flex items-center gap-1 text-[11px] font-semibold text-fg-muted">
+                              {row.port}
+                              {row.atp && <AtpBadge />}
+                            </span>
                             <span className="mt-0.5 block truncate text-[13px] font-bold" style={{ color: tone.fg }}>
                               {row.Hardware}
                             </span>
@@ -596,10 +600,15 @@ export function AllDevicesPage() {
                               <span className="block truncate font-mono text-[10px] text-fg-muted" title={`appVersion: ${row.appVersion}`}>
                                 app {row.appVersion}
                               </span>
-                            ) : (
-                              // Families without appVersion (Smart TV) show the client version in its place, like Mobile's app line.
+                            ) : hasField("Cver") ? (
+                              // Families without appVersion show the client version in its place, like Mobile's app line.
                               <span className="block truncate font-mono text-[10px] text-fg-muted" title={`Cver: ${row.Cver}`}>
                                 Cver {row.Cver}
+                              </span>
+                            ) : (
+                              // Linux STB has only a release (kept in sprintNo).
+                              <span className="block truncate font-mono text-[10px] text-fg-muted" title={`Release: ${row.sprintNo}`}>
+                                release {row.sprintNo}
                               </span>
                             )}
                             <span className="flex items-center justify-between gap-1 text-[10px] text-fg-subtle">
@@ -708,7 +717,9 @@ export function AllDevicesPage() {
                           id === "device" ? (
                             <td key={id} className="whitespace-nowrap px-3 py-2.5 font-semibold">{row.device}</td>
                           ) : id === "port" ? (
-                            <td key={id} className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{row.port}</td>
+                            <td key={id} className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
+                              {row.port} {row.atp && <AtpBadge />}
+                            </td>
                           ) : id === "key" ? (
                             <td key={id} className="break-all px-3 py-2.5 font-mono text-xs text-fg-muted">{row.key}</td>
                           ) : id === "Hardware" ? (

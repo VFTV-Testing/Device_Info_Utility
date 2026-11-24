@@ -96,8 +96,8 @@ export interface EnvEntryInput {
 export const EMPTY_ENV_DOC: EnvironmentDoc = { version: 1, ports: {} };
 
 const ROBOT_PATTERN = /^[A-Za-z0-9_&.+]+(?:-[A-Za-z0-9_&.+]+)*$/;
-/** Every device family shares this file: ports are PORT1 (STB, Mobile) or P1 (Smart TV). */
-const ENV_PORT_PATTERN = /^(?:PORT|P)[1-9]\d*$/;
+/** Every device family shares this file: ports are PORT1 (Android STB, Mobile), STB1 (Linux STB) or P1 (Smart TV). */
+const ENV_PORT_PATTERN = /^(?:PORT|STB|P)[1-9]\d*$/;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

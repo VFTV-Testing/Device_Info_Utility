@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { naturalCompare } from "../../shared/deviceId";
+import { naturalCompare, PORT_PATTERN } from "../../shared/deviceId";
 import { activeSchema, hasField, platformLabel } from "../../shared/schema";
 import {
   ENV_CATEGORIES,
@@ -48,6 +48,7 @@ import { pendingId, useEnvironment } from "../context/EnvironmentContext";
 import { useDebouncedValue } from "../hooks";
 import { cn, formatTime, timeAgo } from "../lib/cn";
 import { buildRows, COUNTRY_NAMES } from "../lib/deviceFilters";
+import { AtpBadge } from "../components/device/AtpBadge";
 import { ApiError } from "../services/api";
 
 type PortState = EnvStatus | "none";
@@ -61,6 +62,8 @@ interface PortRow {
   env: string;
   platforms: string[];
   services: string[];
+  /** An ATP device (identifier tagged "_ATP"). */
+  atp: boolean;
   /** Status history (oldest first) and the current status. */
   entries: EnvEntry[];
   latest?: EnvEntry;
@@ -194,6 +197,7 @@ export function EnvironmentPage() {
       env: envCode,
       platforms: [],
       services: [],
+      atp: false,
       entries: [],
       state: "none",
       setupEntries: [],
@@ -206,15 +210,17 @@ export function EnvironmentPage() {
       const existing = map.get(id) ?? blank(row.device, row.port, row.country);
       if (!existing.platforms.includes(row.Hardware)) existing.platforms.push(row.Hardware);
       if (!existing.services.includes(row.service)) existing.services.push(row.service);
+      if (row.atp) existing.atp = true;
       map.set(id, existing);
     }
     // The environment file is shared by every device family. Show only this family's robots;
-    // STB (the original family) also keeps ports whose robot is no longer in any device file.
+    // Android STB (the original family) also keeps ports whose robot is no longer in any device
+    // file, as long as the port is written its way (PORT1): STB1 and P1 belong to Linux STB and Smart TV.
     const familyRobots = new Set([...map.values()].map((p) => p.robot));
     const keepUnknownRobots = activeSchema().id === "stb";
     const extra = [doc?.ports ?? {}, doc?.setup ?? {}]
       .flatMap((m) => Object.entries(m).flatMap(([robot, byPort]) => Object.keys(byPort).map((port) => [robot, port] as const)))
-      .filter(([robot]) => keepUnknownRobots || familyRobots.has(robot));
+      .filter(([robot, port]) => familyRobots.has(robot) || (keepUnknownRobots && PORT_PATTERN.test(port)));
     for (const p of Object.values(pending)) extra.push([p.robot, p.port]);
     for (const [robot, port] of extra) {
       const id = pendingId(robot, port);
@@ -622,6 +628,7 @@ function PortItem({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[13px] font-semibold text-fg">{row.port}</span>
+        {row.atp && <AtpBadge />}
         {row.platforms.length > 0 && <span className="text-xs text-fg-muted">{row.platforms.join(", ")}</span>}
         <StatusBadge state={row.state} className="ml-auto" />
       </div>

@@ -18,6 +18,13 @@ export interface Row extends DeviceRecord {
   service: string;
   /** Mobile only: "Tablet" or "Phone", from the end of the identifier ("" for other families). */
   kind: string;
+  /** True for ATP devices: the identifier carries "_ATP" where others have "_PROD" (…-DE_ATP-DVBC). */
+  atp: boolean;
+}
+
+/** "…-DE_ATP-DVBC" → true; "…-DE_PROD-DVBC" → false. */
+export function isAtp(key: string): boolean {
+  return /_ATP(?=-|$)/i.test(key);
 }
 
 const KIND_NAMES: Record<string, string> = { TABLET: "Tablet", SMARTPHONE: "Phone", PHONE: "Phone" };
@@ -96,7 +103,7 @@ export function buildRows(data: DeviceData): Row[] {
     if (derivePlatform) values.Hardware = id?.suffix.split("-")[0] || "—";
     const place = record.Country === undefined ? { country: "—", service: "—" } : splitCountry(record.Country);
     const kind = withKind && id ? deviceKind(id.suffix) : "";
-    return { key, device: id?.device ?? "—", port: id?.port ?? "—", ...values, ...place, kind };
+    return { key, device: id?.device ?? "—", port: id?.port ?? "—", ...values, ...place, kind, atp: isAtp(key) };
   });
 }
 

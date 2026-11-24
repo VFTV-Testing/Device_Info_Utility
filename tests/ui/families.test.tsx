@@ -19,6 +19,13 @@ import type { EnvApi } from "../../src/services/environmentClient";
 
 const mobile = findFamily("mobile", ALL_FAMILIES)!;
 const smartTv = findFamily("smarttv", ALL_FAMILIES)!;
+const linux = findFamily("linuxstb", ALL_FAMILIES)!;
+
+const LINUX_DATA = {
+  "TES7-GER-STB1-AppleTV_4K-CZ_PROD-OTT": { sprintNo: "S49", Hardware: "AppleTV_4K", Country: "CZ_OTT" },
+  "TES9-GER-STB6-GEN2_PREM-DE_ATP-DVBC": { sprintNo: "S119", Hardware: "GEN2_PREM", Country: "DE_DVBC" },
+  "TES13-POR-STB2-GEN2_PREM-PT_PROD-MCAST": { sprintNo: "S120E", Hardware: "GEN2_PREM", Country: "PT_MCAST" },
+} as unknown as DeviceData;
 
 const MOBILE_DATA = {
   "X103-GER-PORT1-ANDROID-TABLET": { sprintNo: "S15.6", Cver: "0.15.6", appVersion: "0.45.12" },
@@ -44,6 +51,16 @@ describe("device family rules", () => {
     expect(normalizePort("2")).toBe("P2");
     expect(normalizePort("p4")).toBe("P4");
     expect(validateNewKeyParts({ device: "X140", port: "P1", suffix: "Tizen-Samsung-X" }, {})).toEqual({});
+  });
+
+  it("reads Linux STB identifiers written with STB1", () => {
+    setActiveSchema(linux);
+    expect(parseDeviceId("TES10-GER-STB8-GEN2_PREM-DE_PROD-DVBC")).toMatchObject({ device: "TES10-GER", port: "STB8", suffix: "GEN2_PREM-DE_PROD-DVBC" });
+    expect(normalizePort("3")).toBe("STB3");
+    expect(validateDeviceData(LINUX_DATA).ok).toBe(true);
+    const rows = buildRows(LINUX_DATA);
+    expect(rows[2]).toMatchObject({ device: "TES13-POR", Hardware: "GEN2_PREM", country: "PT", service: "MCAST", sprintNo: "S120E", Cver: "—", atp: false });
+    expect(rows[1]!.atp).toBe(true);
   });
 
   it("keeps STB strict: P1 is not a port there", () => {
@@ -159,6 +176,46 @@ describe("Environment per family", () => {
     expect(screen.getByText("X110-GER")).toBeInTheDocument();
     expect(screen.queryByText("X117-AL")).not.toBeInTheDocument();
     expect(screen.queryByRole("radiogroup", { name: "Environment" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Linux STB", () => {
+  it("marks ATP devices on the cards", async () => {
+    renderFamily(linux, LINUX_DATA);
+    expect(await screen.findByText("TES9-GER")).toBeInTheDocument();
+    expect(screen.getAllByText("ATP")).toHaveLength(1);
+  });
+});
+
+describe("Environment keeps families apart", () => {
+  it("does not show Linux STB or Smart TV ports under Android STB", async () => {
+    const at = new Date().toISOString();
+    const doc: EnvironmentDoc = {
+      version: 1,
+      ports: {
+        "X117-AL": { PORT1: [{ at, by: "sai", status: "ok", note: "" }] },
+        "TES8-GER": { STB1: [{ at, by: "sai", status: "issue", category: "ir", note: "IR" }] },
+        X124: { P1: [{ at, by: "sai", status: "ok", note: "" }] },
+      },
+    };
+    const env: EnvApi = {
+      load: vi.fn(async () => ({ doc, version: "v1", fetchedAt: at, readOnly: true, location: "acme/app@main:env.json" })),
+      addEntries: vi.fn(),
+    };
+    const client = {
+      getConfig: vi.fn(async () => ({ storage: "github" as const, location: "acme/Configs@Main:x.json", authEnabled: false, readOnly: true, viewOnly: true })),
+      getDevices: vi.fn(async () => ({ data: {}, version: "v1", fetchedAt: at })),
+    } as unknown as Api;
+    render(
+      <DeviceDataProvider client={client}>
+        <EnvironmentProvider client={env}>
+          <RouterProvider router={createMemoryRouter(routes, { initialEntries: ["/environment"] })} />
+        </EnvironmentProvider>
+      </DeviceDataProvider>,
+    );
+    expect(await screen.findByText("X117-AL")).toBeInTheDocument();
+    expect(screen.queryByText("TES8-GER")).not.toBeInTheDocument();
+    expect(screen.queryByText("X124")).not.toBeInTheDocument();
   });
 });
 

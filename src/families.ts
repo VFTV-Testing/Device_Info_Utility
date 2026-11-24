@@ -11,17 +11,28 @@ export interface DeviceFamily extends FamilySchema {
   /** One line shown under the family name in the header menu. */
   description: string;
   /** Badge colour (mapped to the platform palette in FamilySwitcher). */
-  tone: "stb" | "mobile" | "tv";
+  tone: "stb" | "linux" | "mobile" | "tv";
   target: GitHubTarget;
 }
 
 export const ALL_FAMILIES: DeviceFamily[] = [
   {
     ...STB_SCHEMA,
-    label: "STB",
-    description: "Set-top boxes",
+    label: "Android STB",
+    description: "Android set-top boxes",
     tone: "stb",
     target: GITHUB_TARGET,
+  },
+  {
+    id: "linuxstb",
+    label: "Linux STB",
+    description: "Linux set-top boxes on the TES robots",
+    tone: "linux",
+    // Release → sprintNo, Device Type → Hardware, OPCO → Country.
+    fields: ["sprintNo", "Hardware", "Country"],
+    // Identifiers are written TES7-GER-STB2-GEN2_PREM-DE: the port is STB1…STB8.
+    portPrefixes: ["STB"],
+    target: { ...GITHUB_TARGET, filePath: "Linux_STB_Configs/deviceInformation.json" },
   },
   {
     id: "mobile",

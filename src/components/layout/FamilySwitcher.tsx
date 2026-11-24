@@ -16,8 +16,8 @@ function BoxIcon({ className }: { className?: string }) {
   );
 }
 
-const ICONS: Record<DeviceFamily["tone"], LucideIcon | typeof BoxIcon> = { stb: BoxIcon, mobile: Smartphone, tv: Tv };
-const SLOTS: Record<DeviceFamily["tone"], number> = { stb: 1, mobile: 5, tv: 4 };
+const ICONS: Record<DeviceFamily["tone"], LucideIcon | typeof BoxIcon> = { stb: BoxIcon, linux: BoxIcon, mobile: Smartphone, tv: Tv };
+const SLOTS: Record<DeviceFamily["tone"], number> = { stb: 1, linux: 3, mobile: 5, tv: 4 };
 
 /** The family's colours, taken from the platform palette so they work in light and dark. */
 export function familyStyle(family: DeviceFamily): CSSProperties {
