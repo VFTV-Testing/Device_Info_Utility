@@ -573,7 +573,8 @@ export function AllDevicesPage() {
                             <span className="mt-0.5 block truncate text-[13px] font-bold" style={{ color: tone.fg }}>
                               {row.Hardware}
                             </span>
-                            {hasField("firmwareVersion") && (
+                            {/* fw only when the family has it and it is filled in (Smart TV firmware is often still empty). */}
+                            {hasField("firmwareVersion") && row.firmwareVersion !== "" && row.firmwareVersion !== "—" && (
                               <span
                                 className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted"
                                 title={`firmwareVersion: ${row.firmwareVersion}`}
@@ -581,14 +582,14 @@ export function AllDevicesPage() {
                                 fw {row.firmwareVersion}
                               </span>
                             )}
-                            {hasField("appVersion") && (
+                            {hasField("appVersion") ? (
                               <span className="block truncate font-mono text-[10px] text-fg-muted" title={`appVersion: ${row.appVersion}`}>
                                 app {row.appVersion}
                               </span>
-                            )}
-                            {!hasField("appVersion") && !hasField("firmwareVersion") && (
-                              <span className="block truncate font-mono text-[10px] text-fg-muted" title={`sprintNo: ${row.sprintNo}`}>
-                                sprint {row.sprintNo}
+                            ) : (
+                              // Families without appVersion (Smart TV) show the client version in its place, like Mobile's app line.
+                              <span className="block truncate font-mono text-[10px] text-fg-muted" title={`Cver: ${row.Cver}`}>
+                                Cver {row.Cver}
                               </span>
                             )}
                             <span className="flex items-center justify-between gap-1 text-[10px] text-fg-subtle">
