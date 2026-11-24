@@ -450,7 +450,9 @@ export function EnvironmentPage() {
             />
           </Card>
         ) : view === "cards" ? (
-          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3">
+          // Masonry: each robot panel is as tall as its ports, and shorter panels fill the gaps
+          // (robots have 1 to 8 ports, so a row-based grid left large empty panels).
+          <div className="columns-1 gap-4 md:columns-2 xl:columns-3">
             {robots.map(({ robot, ports: list }, i) => {
               const problems = list.filter((p) => PROBLEM.includes(p.state)).length;
               return (
@@ -461,7 +463,7 @@ export function EnvironmentPage() {
                   transition={{ delay: Math.min(i * 0.03, 0.3) }}
                   aria-label={robot}
                   className={cn(
-                    "glass flex flex-col gap-3 rounded-3xl border p-4 shadow-card",
+                    "glass mb-4 flex break-inside-avoid flex-col gap-3 rounded-3xl border p-4 shadow-card",
                     list.some((p) => p.state === "down") ? "border-danger/40" : problems ? "border-warning/40" : "",
                   )}
                 >

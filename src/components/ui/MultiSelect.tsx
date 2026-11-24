@@ -196,6 +196,8 @@ export function MultiSelect({
                         className={cn(
                           "flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg",
                           "data-[selected=true]:bg-surface-2",
+                          // Nothing matches this value under the other filters.
+                          option.hint === 0 && !checked && "text-fg-subtle",
                         )}
                       >
                         <span
@@ -208,7 +210,7 @@ export function MultiSelect({
                           {checked && <Check className="size-3" strokeWidth={3} />}
                         </span>
                         <span className="min-w-0 flex-1 truncate">{option.label ?? option.value}</span>
-                        {option.hint && <span className="shrink-0 text-xs text-fg-subtle">{option.hint}</span>}
+                        {option.hint != null && option.hint !== "" && <span className="shrink-0 text-xs text-fg-subtle">{option.hint}</span>}
                         <span className="sr-only">{checked ? "(selected)" : ""}</span>
                       </Command.Item>
                     );

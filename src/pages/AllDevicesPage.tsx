@@ -203,15 +203,18 @@ export function AllDevicesPage() {
     [rows],
   );
   const tones = useMemo(() => hardwareTones(options.Hardware), [options.Hardware]);
+  // Each list counts the records matching the search and every *other* filter, so the numbers
+  // agree with the headline count, and the list's own selection does not zero its other values.
   const counts = useMemo(() => {
     const result = {} as Record<FilterName, Map<string, number>>;
     for (const name of FILTER_NAMES) {
+      const match = rowMatcher({ ...filters, [name]: [] }, search);
       const map = new Map<string, number>();
-      for (const row of rows) map.set(row[name], (map.get(row[name]) ?? 0) + 1);
+      for (const row of rows) if (match(row)) map.set(row[name], (map.get(row[name]) ?? 0) + 1);
       result[name] = map;
     }
     return result;
-  }, [rows]);
+  }, [rows, filters, search]);
   const filtered = useMemo(() => {
     const result = rows.filter(rowMatcher(filters, search));
     const dir = sort.dir === "asc" ? 1 : -1;
@@ -516,7 +519,7 @@ export function AllDevicesPage() {
                   value: v,
                   label: name === "country" && COUNTRY_NAMES[v] ? `${v} · ${COUNTRY_NAMES[v]}` : undefined,
                   summary: v,
-                  hint: counts[name].get(v),
+                  hint: counts[name].get(v) ?? 0,
                 }))}
                 onChange={(values) => setFilter(name, values)}
                 searchPlaceholder={`Search ${FILTER_LABELS[name].toLowerCase()}…`}
