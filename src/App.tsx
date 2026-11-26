@@ -10,6 +10,8 @@ import { FamilyContext, type FamilyValue } from "./context/FamilyContext";
 import { FAMILIES, readFamilyChoice, rememberFamily, type DeviceFamily } from "./families";
 import { ModeratorContext } from "./context/ModeratorContext";
 import { rememberViewMode, ViewModeContext, wantsViewMode } from "./context/ViewModeContext";
+import { RouteError } from "./components/common/RouteError";
+import { isStaleBuildError, reloadOnceForUpdate } from "./lib/staleBuild";
 import { SignInPage } from "./pages/SignInPage";
 import { api } from "./services/api";
 import { clearStoredToken, createDirectClient, type GitHubSession } from "./services/githubSession";
@@ -18,10 +20,23 @@ import { clearModerator, createModeratorDeviceClient, createModeratorEnvClient, 
 import { createViewerClient } from "./services/viewerClient";
 
 // Each page loads on first visit (its own file), so the first screen downloads less.
-const AllDevicesPage = lazy(() => import("./pages/AllDevicesPage").then((m) => ({ default: m.AllDevicesPage })));
-const DeviceManagerPage = lazy(() => import("./pages/DeviceManagerPage").then((m) => ({ default: m.DeviceManagerPage })));
-const EnvironmentPage = lazy(() => import("./pages/EnvironmentPage").then((m) => ({ default: m.EnvironmentPage })));
-const JsonPreviewPage = lazy(() => import("./pages/JsonPreviewPage").then((m) => ({ default: m.JsonPreviewPage })));
+// If the file is gone because the site was updated while the tab was open, reload once to get
+// the new version; otherwise the route's error page offers a Reload button.
+function lazyPage<T extends Record<string, unknown>>(load: () => Promise<T>, name: keyof T) {
+  return lazy(() =>
+    load().then(
+      (m) => ({ default: m[name] as React.ComponentType }),
+      (error: unknown) => {
+        if (isStaleBuildError(error) && reloadOnceForUpdate()) return new Promise<never>(() => undefined);
+        throw error;
+      },
+    ),
+  );
+}
+const AllDevicesPage = lazyPage(() => import("./pages/AllDevicesPage"), "AllDevicesPage");
+const DeviceManagerPage = lazyPage(() => import("./pages/DeviceManagerPage"), "DeviceManagerPage");
+const EnvironmentPage = lazyPage(() => import("./pages/EnvironmentPage"), "EnvironmentPage");
+const JsonPreviewPage = lazyPage(() => import("./pages/JsonPreviewPage"), "JsonPreviewPage");
 
 /** View-only visitors have no editor, so the home page becomes All Devices for them. */
 function HomeRoute() {
@@ -33,12 +48,19 @@ export const routes: RouteObject[] = [
   {
     path: "/",
     element: <AppShell />,
+    errorElement: <RouteError />,
     children: [
-      { index: true, element: <HomeRoute /> },
-      { path: "devices", element: <AllDevicesPage /> },
-      { path: "json", element: <JsonPreviewPage /> },
-      { path: "environment", element: <EnvironmentPage /> },
-      { path: "*", element: <HomeRoute /> },
+      {
+        // A page that fails shows the error inside the app, with the header still there.
+        errorElement: <RouteError />,
+        children: [
+          { index: true, element: <HomeRoute /> },
+          { path: "devices", element: <AllDevicesPage /> },
+          { path: "json", element: <JsonPreviewPage /> },
+          { path: "environment", element: <EnvironmentPage /> },
+          { path: "*", element: <HomeRoute /> },
+        ],
+      },
     ],
   },
 ];
