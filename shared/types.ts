@@ -86,7 +86,7 @@ export interface AppConfigInfo {
   readOnly: boolean;
   /** View-only visitor without a GitHub sign-in (e.g. management). Editing UI is hidden. */
   viewOnly?: boolean;
-  /** Signed in with the shared moderator key: this is the name they gave. Environment status only. */
+  /** Signed in with the shared moderator key: this is the name they gave. Device information + Device health status. */
   moderator?: string;
   user?: string;
 }

@@ -14,7 +14,7 @@ import { SignInPage } from "./pages/SignInPage";
 import { api } from "./services/api";
 import { clearStoredToken, createDirectClient, type GitHubSession } from "./services/githubSession";
 import { createDirectEnvClient, createViewerEnvClient, serverEnvApi } from "./services/environmentClient";
-import { clearModerator, createModeratorEnvClient, readModerator, type ModeratorSession } from "./services/moderator";
+import { clearModerator, createModeratorDeviceClient, createModeratorEnvClient, readModerator, type ModeratorSession } from "./services/moderator";
 import { createViewerClient } from "./services/viewerClient";
 
 // Each page loads on first visit (its own file), so the first screen downloads less.
@@ -26,7 +26,6 @@ const JsonPreviewPage = lazy(() => import("./pages/JsonPreviewPage").then((m) =>
 /** View-only visitors have no editor, so the home page becomes All Devices for them. */
 function HomeRoute() {
   const { config } = useDeviceData();
-  if (config?.moderator) return <Navigate to="/environment" replace />;
   return config?.viewOnly ? <Navigate to="/devices" replace /> : <DeviceManagerPage />;
 }
 
@@ -75,15 +74,14 @@ function DirectApp() {
   const viewerClient = useMemo(() => (viewOnly ? createViewerClient(target) : null), [viewOnly, target]);
   const envClient = useMemo(() => (session ? createDirectEnvClient(ENV_TARGET, session) : null), [session]);
   const viewerEnvClient = useMemo(() => (viewOnly ? createViewerEnvClient(ENV_TARGET) : null), [viewOnly]);
-  // Moderators read devices like the view-only link (with their name on the config) and push Environment status via the helper.
+  // Moderators read and save device information, and push Device health status, through the helper.
   const moderatorClients = useMemo(() => {
     if (!moderator) return null;
-    const viewer = createViewerClient(target);
     return {
-      devices: { ...viewer, getConfig: async () => ({ ...(await viewer.getConfig()), moderator: moderator.name }) },
+      devices: createModeratorDeviceClient(target, family.id, moderator),
       environment: createModeratorEnvClient(ENV_TARGET, moderator),
     };
-  }, [moderator, target]);
+  }, [moderator, target, family.id]);
   const signOutModerator = useCallback(() => {
     clearModerator();
     setModerator(null);

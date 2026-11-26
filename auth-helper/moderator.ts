@@ -2,17 +2,23 @@
  * Moderator access for people without a GitHub account (e.g. stakeholders fixing issues onsite).
  *
  * One shared moderator key (a Worker secret, never in the site or the repo) lets its holder
- * add Environment STATUS updates — nothing else:
- *   POST /moderator/verify       Authorization: Bearer <key>             → { ok: true }
- *   POST /environment/entries    Authorization: Bearer <key>, { name, entries } → commit result
+ * add Device health STATUS updates and change device information:
+ *   POST /moderator/verify       Authorization: Bearer <key>                      → { ok: true }
+ *   POST /environment/entries    Authorization: Bearer <key>, { name, entries }   → commit result
+ *   POST /devices/read           Authorization: Bearer <key>, { family }          → latest file
+ *   POST /devices/write          Authorization: Bearer <key>, { name, family, action, … } → commit result
  *
  * The helper commits with the GitHub App's own installation token (private key = Worker secret),
- * only to the environment file, append-only, with the same validation as the app. Setup info
- * cannot be changed this way. Each entry and commit records the name the moderator gave.
+ * with the same validation and conflict checks as the app: the environment file append-only
+ * (setup info cannot be changed this way), and each family's deviceInformation.json in the
+ * Configs repository. Each entry and commit records the name the moderator gave.
  */
+import { DeviceService } from "../shared/deviceService";
 import { EnvironmentService } from "../shared/environment";
 import { AppError } from "../shared/errors";
+import { findFamilyDefinition, type FamilyDefinition } from "../shared/familySchemas";
 import { GitHubFileStore } from "../shared/githubStore";
+import { setActiveSchema } from "../shared/schema";
 
 export interface ModeratorEnv {
   /** Shared moderator key (Secret). Moderator access is off when empty. */
@@ -27,10 +33,14 @@ export interface ModeratorEnv {
   ENV_REPO?: string;
   ENV_BRANCH?: string;
   ENV_FILE_PATH?: string;
+  /** Where the device files live (defaults match the live site: VFTV-Testing/Configs@Main). */
+  DEVICES_OWNER?: string;
+  DEVICES_REPO?: string;
+  DEVICES_BRANCH?: string;
 }
 
 const API_URL = "https://api.github.com";
-const MAX_BODY = 200_000;
+const MAX_BODY = 1_000_000;
 const MAX_NAME = 60;
 
 type Json = (body: unknown, status: number) => Response;
@@ -132,9 +142,29 @@ async function installationToken(env: ModeratorEnv, fetchFn: typeof fetch): Prom
 
 // ── request handling ─────────────────────────────────────────────────────────────────
 
+const MODERATOR_PATHS = ["/moderator/verify", "/environment/entries", "/devices/read", "/devices/write"];
+
 export function isModeratorPath(pathname: string): boolean {
-  return pathname.endsWith("/moderator/verify") || pathname.endsWith("/environment/entries");
+  return MODERATOR_PATHS.some((p) => pathname.endsWith(p));
 }
+
+/**
+ * The family rules (fields, port format) are module state, so device requests run one at a
+ * time, each with its own family opened first. Requests are short; the queue never grows long.
+ */
+let deviceQueue: Promise<unknown> = Promise.resolve();
+function inFamily<T>(family: FamilyDefinition, work: () => Promise<T>): Promise<T> {
+  const run = async () => {
+    setActiveSchema(family);
+    return work();
+  };
+  const next = deviceQueue.then(run, run);
+  deviceQueue = next.catch(() => undefined);
+  return next;
+}
+
+type DeviceAction = "create" | "update" | "delete" | "import";
+const DEVICE_ACTIONS: readonly DeviceAction[] = ["create", "update", "delete", "import"];
 
 function cleanName(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -158,17 +188,67 @@ export async function handleModeratorRequest(request: Request, env: ModeratorEnv
 
   if (url.pathname.endsWith("/moderator/verify")) return json({ ok: true }, 200);
 
-  // POST /environment/entries
   if (!env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY || !env.GITHUB_APP_INSTALLATION_ID) {
     return json({ error: "not_configured", error_description: "The helper is missing its GitHub App settings for moderator saves." }, 503);
   }
   if (Number(request.headers.get("Content-Length") ?? 0) > MAX_BODY) return json({ error: "too_large", error_description: "Too many updates in one push." }, 413);
-  let body: { name?: unknown; entries?: unknown };
+  let body: { name?: unknown; entries?: unknown; family?: unknown; action?: unknown; key?: unknown; values?: unknown; base?: unknown; mode?: unknown; mutations?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
     return json({ error: "bad_request", error_description: "Expected a JSON body." }, 400);
   }
+  const appToken = { getToken: () => installationToken(env, fetchFn) };
+  const fail = (error: unknown, fallback: string) =>
+    error instanceof AppError
+      ? json({ error: error.code, error_description: error.message, details: error.details }, error.status)
+      : json({ error: "internal", error_description: fallback }, 500);
+
+  // ── device information (one family's file in the Configs repository) ──
+  if (url.pathname.endsWith("/devices/read") || url.pathname.endsWith("/devices/write")) {
+    const family = findFamilyDefinition(body.family);
+    if (!family) return json({ error: "bad_request", error_description: "Unknown device family." }, 400);
+    const service = new DeviceService(
+      new GitHubFileStore({
+        owner: env.DEVICES_OWNER || "VFTV-Testing",
+        repo: env.DEVICES_REPO || "Configs",
+        branch: env.DEVICES_BRANCH || "Main",
+        filePath: family.filePath,
+        apiUrl: API_URL,
+        tokens: appToken,
+        fetchFn,
+        readOnly: false,
+      }),
+    );
+    if (url.pathname.endsWith("/devices/read")) {
+      try {
+        return json(await inFamily(family, () => service.getSnapshot()), 200);
+      } catch (error) {
+        return fail(error, "The device information could not be read.");
+      }
+    }
+    const who = cleanName(body.name);
+    if (!who) return json({ error: "bad_request", error_description: `Give your name (2–${MAX_NAME} characters).` }, 400);
+    const action = body.action as DeviceAction;
+    if (!DEVICE_ACTIONS.includes(action)) return json({ error: "bad_request", error_description: "Unknown device action." }, 400);
+    const actor = `${who} (moderator)`;
+    try {
+      const result = await inFamily(family, () =>
+        action === "create"
+          ? service.createRecord(body.key, body.values, actor)
+          : action === "update"
+            ? service.updateRecord(body.key, body.base, body.values, actor)
+            : action === "delete"
+              ? service.deleteRecord(body.key, body.base, actor)
+              : service.importRecords(body.mode, body.mutations, actor),
+      );
+      return json(result, action === "create" || action === "import" ? 201 : 200);
+    } catch (error) {
+      return fail(error, "The change could not be saved.");
+    }
+  }
+
+  // ── POST /environment/entries ──
   const name = cleanName(body.name);
   if (!name) return json({ error: "bad_request", error_description: `Give your name (2–${MAX_NAME} characters).` }, 400);
   if (!Array.isArray(body.entries) || body.entries.length === 0) return json({ error: "bad_request", error_description: "There are no updates to save." }, 400);
@@ -182,7 +262,7 @@ export async function handleModeratorRequest(request: Request, env: ModeratorEnv
     branch: env.ENV_BRANCH || "main",
     filePath: (env.ENV_FILE_PATH || "environment/environmentStatus.json").replace(/^\/+/, ""),
     apiUrl: API_URL,
-    tokens: { getToken: () => installationToken(env, fetchFn) },
+    tokens: appToken,
     fetchFn,
     readOnly: false,
   });
@@ -190,7 +270,6 @@ export async function handleModeratorRequest(request: Request, env: ModeratorEnv
     const result = await new EnvironmentService(store).addEntries(body.entries, `${name} (moderator)`);
     return json(result, 201);
   } catch (error) {
-    if (error instanceof AppError) return json({ error: error.code, error_description: error.message, details: error.details }, error.status);
-    return json({ error: "internal", error_description: "The update could not be saved." }, 500);
+    return fail(error, "The update could not be saved.");
   }
 }

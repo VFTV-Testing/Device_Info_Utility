@@ -7,13 +7,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EnvEntryInput, EnvironmentDoc, EnvWriteResult } from "../../shared/environment";
 import type { DeviceData, DeviceRecord } from "../../shared/types";
 import { routes } from "../../src/App";
-import { DeviceDataProvider } from "../../src/context/DeviceDataContext";
+import { DeviceHealthSync } from "../../src/components/layout/DeviceHealthSync";
+import { DeviceDataProvider, useDeviceData } from "../../src/context/DeviceDataContext";
 import { EnvironmentProvider } from "../../src/context/EnvironmentContext";
 import { ModeratorContext } from "../../src/context/ModeratorContext";
 import { SignInPage } from "../../src/pages/SignInPage";
 import { ApiError, type Api } from "../../src/services/api";
 import type { EnvApi } from "../../src/services/environmentClient";
-import { createModeratorEnvClient, readModerator } from "../../src/services/moderator";
+import { createModeratorDeviceClient, createModeratorEnvClient, readModerator } from "../../src/services/moderator";
 
 const TARGET = { owner: "VFTV-Testing", repo: "Configs", branch: "Main", filePath: "AVSB_GEN3_Configs/deviceInformation.json" };
 const rec: DeviceRecord = { sprintNo: "67.00+1", Cver: "0.67.00", firmwareVersion: "1", appVersion: "0.67.00", Hardware: "GEN3", Country: "GR_MCAST" };
@@ -77,10 +78,24 @@ describe("Moderator client", () => {
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer k-123");
     expect(JSON.parse(String(init.body))).toEqual({ name: "Priya", entries: [{ robot: "X111-GRE", port: "PORT4", status: "ok", note: "fixed" }] });
   });
+
+  it("reads and saves device information through the helper, for the open family", async () => {
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify({ data: DATA, version: "v", fetchedAt: "", commit: { sha: "1", message: "m" } }), { status: 200 }));
+    const client = createModeratorDeviceClient(TARGET, "linuxstb", { name: "Priya", key: "k-123", remember: false }, fetchFn as unknown as typeof fetch);
+    expect(await client.getConfig()).toMatchObject({ readOnly: false, moderator: "Priya" });
+    await client.getDevices();
+    await client.updateRecord("TES8-GER-STB1-GEN2_PREM-DE_PROD-DVBC", rec, rec);
+    const calls = fetchFn.mock.calls as unknown as [string, RequestInit][];
+    expect(calls[0]![0]).toMatch(/devices\/read$/);
+    expect(JSON.parse(String(calls[0]![1].body))).toEqual({ family: "linuxstb" });
+    expect(calls[1]![0]).toMatch(/devices\/write$/);
+    expect(new Headers(calls[1]![1].headers).get("Authorization")).toBe("Bearer k-123");
+    expect(JSON.parse(String(calls[1]![1].body))).toMatchObject({ name: "Priya", family: "linuxstb", action: "update", key: "TES8-GER-STB1-GEN2_PREM-DE_PROD-DVBC" });
+  });
 });
 
 describe("Moderator mode", () => {
-  function renderModerator() {
+  function renderModerator(start = "/environment") {
     const doc: EnvironmentDoc = {
       version: 1,
       setup: { "X111-GRE": { PORT4: [{ at: new Date().toISOString(), note: "Router 3 Port2" }] } },
@@ -91,11 +106,11 @@ describe("Moderator mode", () => {
     );
     const env: EnvApi = { load: vi.fn(async () => ({ doc, version: "v1", fetchedAt: new Date().toISOString(), readOnly: false, location: "x" })), addEntries };
     const devices = {
-      getConfig: vi.fn(async () => ({ storage: "github" as const, location: "x", authEnabled: true, readOnly: true, viewOnly: true, moderator: "Priya" })),
+      getConfig: vi.fn(async () => ({ storage: "github" as const, location: "x", authEnabled: true, readOnly: false, moderator: "Priya" })),
       getDevices: vi.fn(async () => ({ data: DATA, version: "v1", fetchedAt: new Date().toISOString() })),
     } as unknown as Api;
     const signOut = vi.fn();
-    const router = createMemoryRouter(routes, { initialEntries: ["/"] });
+    const router = createMemoryRouter(routes, { initialEntries: [start] });
     render(
       <ModeratorContext.Provider value={{ name: "Priya", signOut }}>
         <DeviceDataProvider client={devices}>
@@ -108,13 +123,12 @@ describe("Moderator mode", () => {
     return { addEntries, signOut, router };
   }
 
-  it("opens on Environment, shows who is signed in, and hides the device editor", async () => {
-    const { router, signOut } = renderModerator();
-    expect(await screen.findByRole("region", { name: "X111-GRE" })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/environment");
-    expect(screen.getByText("Moderator · Priya")).toBeInTheDocument();
-    expect(screen.getByText("Signed in as Priya (moderator)")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Device Manager/ })).not.toBeInTheDocument();
+  it("shows who is signed in and offers the device editor", async () => {
+    const { signOut } = renderModerator("/");
+    expect(await screen.findByText("Moderator · Priya")).toBeInTheDocument();
+    expect(await screen.findByText("Signed in as Priya (moderator)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Device Manager/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Device health/ })).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Sign out" }));
     expect(signOut).toHaveBeenCalled();
   });
@@ -136,5 +150,38 @@ describe("Moderator mode", () => {
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Push 1 update" }));
     await waitFor(() => expect(addEntries).toHaveBeenCalledTimes(1));
     expect(addEntries.mock.calls[0]![0]).toEqual([{ robot: "X111-GRE", port: "PORT4", status: "ok", note: "Router reset onsite. Internet back." }]);
+  });
+});
+
+describe("Device health follows new devices", () => {
+  function Add({ keyName }: { keyName: string }) {
+    const { createRecord, snapshot } = useDeviceData();
+    return snapshot ? <button onClick={() => void createRecord(keyName, rec)}>add</button> : null;
+  }
+
+  it("gives a newly added device port a first health entry, once", async () => {
+    let data: DeviceData = { ...DATA };
+    const devices = {
+      getConfig: vi.fn(async () => ({ storage: "github" as const, location: "x", authEnabled: true, readOnly: false })),
+      getDevices: vi.fn(async () => ({ data, version: "v1", fetchedAt: new Date().toISOString() })),
+      createRecord: vi.fn(async (key: string, values: DeviceRecord) => {
+        data = { ...data, [key]: values };
+        return { data, version: "v2", fetchedAt: new Date().toISOString(), commit: { sha: "c0ffee1", message: "Add" } };
+      }),
+    } as unknown as Api;
+    const doc: EnvironmentDoc = { version: 1, ports: { "X111-GRE": { PORT4: [{ at: new Date().toISOString(), status: "ok", note: "" }] } } };
+    const addEntries = vi.fn(async (): Promise<EnvWriteResult> => ({ doc, version: "e2", fetchedAt: new Date().toISOString(), commit: { sha: "e", message: "m" } }));
+    const env: EnvApi = { load: vi.fn(async () => ({ doc, version: "e1", fetchedAt: new Date().toISOString(), readOnly: false, location: "x" })), addEntries };
+    render(
+      <DeviceDataProvider client={devices}>
+        <EnvironmentProvider client={env}>
+          <DeviceHealthSync />
+          <Add keyName="X125-GER-PORT2-GEN3-FUT-DE_PROD-DVBC" />
+        </EnvironmentProvider>
+      </DeviceDataProvider>,
+    );
+    await userEvent.setup().click(await screen.findByRole("button", { name: "add" }));
+    await waitFor(() => expect(addEntries).toHaveBeenCalledTimes(1));
+    expect(addEntries).toHaveBeenCalledWith([{ robot: "X125-GER", port: "PORT2", status: "ok", note: "Device added" }]);
   });
 });

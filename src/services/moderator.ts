@@ -1,12 +1,15 @@
 import type { EnvEntryInput, EnvWriteResult } from "../../shared/environment";
+import type { AppConfigInfo, DevicesSnapshot, WriteResult } from "../../shared/types";
 import { AUTH_HELPER_URL, type GitHubTarget } from "../config";
-import { ApiError } from "./api";
+import { ApiError, type Api } from "./api";
 import { createViewerEnvClient, type EnvApi } from "./environmentClient";
 
 /**
  * Moderator sign-in: one shared key (given out by the tool owner) plus the person's name.
- * Moderators read like the view-only link and send Environment STATUS updates to the
- * sign-in helper, which checks the key and commits with the GitHub App.
+ * Moderators send Device health STATUS updates and device information changes to the
+ * sign-in helper, which checks the key and commits with the GitHub App. Device data is read
+ * through the helper too, so a moderator always sees the file as it is right after a save
+ * (the public file server can lag a few minutes behind).
  * The key is kept only in this browser (this tab, or this device with "Keep me signed in").
  */
 export interface ModeratorSession {
@@ -81,5 +84,37 @@ export function createModeratorEnvClient(target: GitHubTarget, session: Moderato
     load: async () => ({ ...(await reader.load()), readOnly: false }),
     addEntries: (inputs: EnvEntryInput[]) =>
       callHelper<EnvWriteResult>("environment/entries", session.key, { name: session.name, entries: inputs }, fetchFn),
+  };
+}
+
+/**
+ * Device information for moderators: read and saved through the helper (GitHub App), so the
+ * same validation, conflict checks and commit messages apply as for team members.
+ */
+export function createModeratorDeviceClient(
+  target: GitHubTarget,
+  family: string,
+  session: ModeratorSession,
+  fetchFn: typeof fetch = (...a) => fetch(...a),
+): Api {
+  const write = (body: Record<string, unknown>) =>
+    callHelper<WriteResult>("devices/write", session.key, { name: session.name, family, ...body }, fetchFn);
+  return {
+    getConfig: async (): Promise<AppConfigInfo> => ({
+      storage: "github",
+      location: `${target.owner}/${target.repo}@${target.branch}:${target.filePath}`,
+      repoUrl: `https://github.com/${target.owner}/${target.repo}/blob/${encodeURIComponent(target.branch)}/${target.filePath}`,
+      authEnabled: true,
+      readOnly: false,
+      moderator: session.name,
+    }),
+    getDevices: () => callHelper<DevicesSnapshot>("devices/read", session.key, { family }, fetchFn),
+    initialize: async () => {
+      throw new ApiError(403, "READ_ONLY", "Only team members can create a new device file.");
+    },
+    createRecord: (key, values) => write({ action: "create", key, values }),
+    updateRecord: (key, base, values) => write({ action: "update", key, base, values }),
+    deleteRecord: (key, base) => write({ action: "delete", key, base }),
+    importRecords: (mode, mutations) => write({ action: "import", mode, mutations }),
   };
 }

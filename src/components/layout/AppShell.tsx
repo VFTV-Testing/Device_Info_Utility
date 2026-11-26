@@ -18,6 +18,7 @@ import { AnimatedBackground, isCanvasScene } from "./AnimatedBackground";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { FamilySwitcher } from "./FamilySwitcher";
 import { SyncControl } from "./SyncControl";
+import { DeviceHealthSync } from "./DeviceHealthSync";
 
 /** True once the page is scrolled, so the header can get a backdrop only when content passes under it. */
 function useScrolled(threshold = 8): boolean {
@@ -78,7 +79,7 @@ function useHeaderBottom(header: RefObject<HTMLElement | null>, gap = 6): number
 const NAV = [
   { to: "/", label: "Device Manager", icon: Cpu, end: true },
   { to: "/devices", label: "All Devices", icon: LayoutGrid, end: false },
-  { to: "/environment", label: "Environment", icon: Activity, end: false },
+  { to: "/environment", label: "Device health", icon: Activity, end: false },
 ];
 
 export function AppShell() {
@@ -89,7 +90,7 @@ export function AppShell() {
   const viewMode = useViewMode();
   const moderator = useModerator();
   // View-only visitors cannot edit, so the editor page is not offered to them.
-  const nav = viewMode || moderator ? NAV.filter((item) => item.to !== "/") : NAV;
+  const nav = viewMode ? NAV.filter((item) => item.to !== "/") : NAV;
   const location = useLocation();
   const outlet = useOutlet();
   const scrolled = useScrolled();
@@ -262,6 +263,7 @@ export function AppShell() {
         </AnimatePresence>
       </motion.main>
 
+      <DeviceHealthSync />
       <Toaster position="bottom-right" theme={theme} richColors closeButton toastOptions={{ className: "text-sm" }} />
       <Toaster id="welcome" className="welcome-toaster" position="top-right" offset={{ top: welcomeTop }} theme={theme} />
     </div>

@@ -98,7 +98,7 @@ afterEach(() => {
 describe("Environment tab", () => {
   it("is in the top menu and shows problems directly on the cards", async () => {
     setup();
-    expect(await screen.findByRole("link", { name: /Environment/ })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /Device health/ })).toBeInTheDocument();
     const al = await screen.findByRole("region", { name: "X117-AL" });
     expect(within(al).getByText("no IR backup yet")).toBeInTheDocument();
     expect(within(al).getByText("1 problem")).toBeInTheDocument();
@@ -271,11 +271,11 @@ describe("Environment tab", () => {
 
   it("hides updating for people without write access", async () => {
     setup({ readOnly: true });
-    await screen.findByText("You can view the environment status but not update it");
+    await screen.findByText("You can view the device health status but not update it");
     await screen.findByRole("region", { name: "X117-AL" });
     expect(screen.queryByRole("button", { name: /^Update X/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Push/ })).not.toBeInTheDocument();
-    expect(screen.getByText("You can view the environment status but not update it")).toBeInTheDocument();
+    expect(screen.getByText("You can view the device health status but not update it")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "History of X109-CZ PORT4" })).toBeInTheDocument();
   });
 });

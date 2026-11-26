@@ -100,7 +100,7 @@ export function SignInPage({
   onSignedIn: (session: GitHubSession) => void;
   /** Opens the read-only view for people without a GitHub account. */
   onViewOnly?: () => void;
-  /** Signs in with the shared moderator pass key (Environment status updates only). */
+  /** Signs in with the shared moderator pass key (device information + Device health status). */
   onModerator?: (session: ModeratorSession) => void;
   moderatorEnabled?: boolean;
   githubEnabled?: boolean;
@@ -194,7 +194,7 @@ export function SignInPage({
       who: "Team",
       title: "Sign in with GitHub",
       description: githubEnabled
-        ? "Edit devices and the environment. Changes are committed under your name."
+        ? "Edit devices and device health. Changes are committed under your name."
         : "GitHub sign-in is not set up for this site.",
       action: "Continue",
       ariaLabel: "Sign in with GitHub",
@@ -210,7 +210,7 @@ export function SignInPage({
       tags: [<Activity key="e" className="size-4" />, <UserRound key="n" className="size-4" />],
       who: "Moderators",
       title: "Moderator pass key",
-      description: "No GitHub account needed. Update the Environment status with the pass key.",
+      description: "No GitHub account needed. Edit devices and update Device health status with the pass key.",
       action: moderatorOpen ? "Enter your details below" : "Use the pass key",
       ariaLabel: "Sign in as moderator",
       active: moderatorOpen,
@@ -224,7 +224,7 @@ export function SignInPage({
       tags: [<Lock key="r" className="size-4" />],
       who: "Everyone",
       title: "View only",
-      description: "No account needed. Browse every robot, device and environment status — read only.",
+      description: "No account needed. Browse every robot, device and its health status — read only.",
       action: "Open the view",
       ariaLabel: "View without signing in",
       onClick: () => onViewOnly?.(),

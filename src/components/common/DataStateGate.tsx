@@ -114,7 +114,7 @@ export function DataStateGate({ children }: { children: ReactNode }) {
     <>
       {config?.moderator ? (
         <Notice tone="accent" icon={<Eye className="size-4" />} title={`Signed in as ${config.moderator} (moderator)`} className="mb-5">
-          You can update the <strong>Environment</strong> status. Device information and setup info are read only.
+          You can change device information and update the <strong>Device health</strong> status. Setup info is changed by the team.
         </Notice>
       ) : config?.viewOnly ? (
         <Notice tone="accent" icon={<Eye className="size-4" />} title="You are viewing without signing in" className="mb-5">

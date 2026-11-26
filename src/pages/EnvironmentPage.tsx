@@ -296,7 +296,7 @@ export function EnvironmentPage() {
       <div className={cn("space-y-5", pendingCount > 0 && "pb-20")}>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Environment</h2>
+            <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Device health</h2>
             <p className="mt-1 text-sm text-fg-muted">
               Setup and current status per robot port — setup, Bluetooth, box, network and more. Every change is kept in the history.
             </p>
@@ -321,12 +321,12 @@ export function EnvironmentPage() {
         </div>
 
         {!env ? (
-          <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Environment tracking is not set up for this site" />
+          <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Device health tracking is not set up for this site" />
         ) : env.error ? (
           <Notice
             tone="danger"
             icon={<AlertTriangle className="size-4" />}
-            title="The environment status could not be loaded"
+            title="The device health status could not be loaded"
             actions={
               <Button size="sm" onClick={() => void env.refresh()} loading={env.syncing}>
                 Try again
@@ -338,7 +338,7 @@ export function EnvironmentPage() {
         ) : null}
 
         {env?.data?.readOnly && !config?.viewOnly && (
-          <Notice tone="neutral" icon={<PencilLine className="size-4" />} title="You can view the environment status but not update it">
+          <Notice tone="neutral" icon={<PencilLine className="size-4" />} title="You can view the device health status but not update it">
             Updating needs Write access to <code className="text-xs">{env.data.location}</code>.
           </Notice>
         )}
@@ -402,7 +402,7 @@ export function EnvironmentPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search robots, ports, setup, notes…"
-              aria-label="Search environment"
+              aria-label="Search device health"
               className="h-9 rounded-full pl-10"
             />
           </div>
@@ -439,7 +439,7 @@ export function EnvironmentPage() {
 
         {env?.loading ? (
           <Card className="flex items-center justify-center gap-2 p-10 text-sm text-fg-muted">
-            <Loader2 className="size-4 animate-spin" /> Loading environment status…
+            <Loader2 className="size-4 animate-spin" /> Loading device health…
           </Card>
         ) : shown.length === 0 ? (
           <Card>
@@ -836,7 +836,7 @@ function ReviewDialog({ open, onClose, rows }: { open: boolean; onClose: () => v
     setError(null);
     try {
       const result = await env.pushPending();
-      commitToast(`${count} environment update${count === 1 ? "" : "s"} pushed`, result.commit, config?.storage === "local");
+      commitToast(`${count} device health update${count === 1 ? "" : "s"} pushed`, result.commit, config?.storage === "local");
       onClose();
     } catch (e) {
       const message = e instanceof ApiError ? e.message : "The updates could not be pushed.";

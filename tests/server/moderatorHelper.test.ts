@@ -12,7 +12,7 @@ const { privateKey, publicKey } = generateKeyPairSync("rsa", {
   publicKeyEncoding: { type: "spki", format: "pem" },
 });
 
-function setup(overrides: Partial<AuthHelperEnv> = {}) {
+function setup(overrides: Partial<AuthHelperEnv> = {}, devices?: FakeGitHub) {
   const gh = new FakeGitHub({
     owner: "VFTV-Testing",
     repo: "Device_Info_Utility",
@@ -30,6 +30,7 @@ function setup(overrides: Partial<AuthHelperEnv> = {}) {
       jwts.push(new Headers(init?.headers).get("authorization")!.replace("Bearer ", ""));
       return new Response(JSON.stringify({ token: "inst-token", expires_at: new Date(Date.now() + 3600_000).toISOString() }), { status: 201 });
     }
+    if (devices && url.pathname.startsWith(`/repos/${devices.owner}/${devices.repo}/`)) return devices.fetch(input, init);
     return gh.fetch(input, init);
   };
   const env: AuthHelperEnv = {
@@ -124,5 +125,54 @@ describe("moderator access in the helper", () => {
       { GITHUB_CLIENT_ID: "x", GITHUB_CLIENT_SECRET: "y", ALLOWED_ORIGINS: ORIGIN },
     );
     expect(res.headers.get("Access-Control-Allow-Headers")).toContain("Authorization");
+  });
+});
+
+describe("moderator device changes in the helper", () => {
+  const LINUX_KEY = "TES8-GER-STB1-GEN2_PREM-DE_PROD-DVBC";
+  const linuxFile = () =>
+    new FakeGitHub({
+      owner: "VFTV-Testing",
+      repo: "Configs",
+      branch: "Main",
+      path: "Linux_STB_Configs/deviceInformation.json",
+      initialText: JSON.stringify({ [LINUX_KEY]: { sprintNo: "S118F", Hardware: "GEN2_PREM", Country: "DE_DVBC" } }, null, 4) + "\n",
+    });
+
+  it("reads the open family's file with the GitHub App", async () => {
+    const devices = linuxFile();
+    const { call } = setup({}, devices);
+    const res = await call("/devices/read", { body: { family: "linuxstb" } });
+    expect(res.status).toBe(200);
+    expect(Object.keys(((await res.json()) as { data: object }).data)).toEqual([LINUX_KEY]);
+    expect(devices.requests[0]!.auth).toBe("Bearer inst-token");
+  });
+
+  it("adds a device with that family's rules and records the moderator", async () => {
+    const devices = linuxFile();
+    const { call } = setup({}, devices);
+    const key = "TES30-GER-STB2-GEN2_ENTRY-DE_PROD-OTT";
+    const res = await call("/devices/write", { body: { name: "Priya", family: "linuxstb", action: "create", key, values: { sprintNo: "S120E", Hardware: "GEN2_ENTRY", Country: "DE_OTT" } } });
+    expect(res.status).toBe(201);
+    expect(JSON.parse(devices.text!)[key]).toEqual({ sprintNo: "S120E", Hardware: "GEN2_ENTRY", Country: "DE_OTT" });
+    expect(devices.commits.at(-1)!.message).toContain("Requested by: Priya (moderator)");
+  });
+
+  it("rejects records that do not fit the family", async () => {
+    const devices = linuxFile();
+    const { call } = setup({}, devices);
+    // Android STB fields and a PORT1 port are not Linux STB.
+    const res = await call("/devices/write", {
+      body: { name: "Priya", family: "linuxstb", action: "create", key: "TES30-GER-PORT1-GEN2-DE_PROD-OTT", values: { sprintNo: "S1", Hardware: "GEN2", Country: "DE_OTT" } },
+    });
+    expect(res.status).toBe(400);
+    expect(devices.commits).toHaveLength(0);
+  });
+
+  it("refuses an unknown family, a missing name or a wrong key", async () => {
+    const { call } = setup({}, linuxFile());
+    expect((await call("/devices/read", { body: { family: "nope" } })).status).toBe(400);
+    expect((await call("/devices/write", { body: { family: "linuxstb", action: "delete", key: "x" } })).status).toBe(400);
+    expect((await call("/devices/read", { key: "wrong", ip: "10.77.0.1", body: { family: "linuxstb" } })).status).toBe(401);
   });
 });

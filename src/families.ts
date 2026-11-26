@@ -1,4 +1,5 @@
-import { STB_SCHEMA, type FamilySchema } from "../shared/schema";
+import { FAMILY_DEFINITIONS } from "../shared/familySchemas";
+import type { FamilySchema } from "../shared/schema";
 import { DATA_MODE, GITHUB_TARGET, type GitHubTarget } from "./config";
 
 /**
@@ -15,49 +16,20 @@ export interface DeviceFamily extends FamilySchema {
   target: GitHubTarget;
 }
 
-export const ALL_FAMILIES: DeviceFamily[] = [
-  {
-    ...STB_SCHEMA,
-    label: "Android STB",
-    description: "Android set-top boxes",
-    tone: "stb",
-    target: GITHUB_TARGET,
-  },
-  {
-    id: "linuxstb",
-    label: "Linux STB",
-    description: "Linux set-top boxes on the TES robots",
-    tone: "linux",
-    // Release → sprintNo, Device Type → Hardware, OPCO → Country.
-    fields: ["sprintNo", "Hardware", "Country"],
-    // Identifiers are written TES7-GER-STB2-GEN2_PREM-DE: the port is STB1…STB8.
-    portPrefixes: ["STB"],
-    target: { ...GITHUB_TARGET, filePath: "Linux_STB_Configs/deviceInformation.json" },
-  },
-  {
-    id: "mobile",
-    label: "Mobile",
-    description: "Android and iOS phones and tablets",
-    tone: "mobile",
-    fields: ["sprintNo", "Cver", "appVersion"],
-    portPrefixes: ["PORT"],
-    // X103-GER-PORT1-ANDROID-TABLET → Tablet, X110-GER-PORT3-iOS-SMARTPHONE → Phone (shown on the cards).
-    deviceKindFromKey: true,
-    target: { ...GITHUB_TARGET, filePath: "Mobile_Configs/deviceInformation.json" },
-  },
-  {
-    id: "smarttv",
-    label: "Smart TV",
-    description: "Smart TVs and streaming sticks",
-    tone: "tv",
-    fields: ["sprintNo", "firmwareVersion", "appVersion"],
-    // Android, FireOS, Tizen, WebOS… are operating systems, so the platform column is called OS.
-    platformLabel: "OS",
-    // TV identifiers are written X122-P1-…
-    portPrefixes: ["P"],
-    target: { ...GITHUB_TARGET, filePath: "SmartTV_Configs/deviceInformation.json" },
-  },
-];
+/** Labels and colours for the shared family rules (shared/familySchemas.ts). */
+const LOOKS: Record<string, Pick<DeviceFamily, "label" | "description" | "tone">> = {
+  stb: { label: "Android STB", description: "Android set-top boxes", tone: "stb" },
+  linuxstb: { label: "Linux STB", description: "Linux set-top boxes on the TES robots", tone: "linux" },
+  mobile: { label: "Mobile", description: "Android and iOS phones and tablets", tone: "mobile" },
+  smarttv: { label: "Smart TV", description: "Smart TVs and streaming sticks", tone: "tv" },
+};
+
+export const ALL_FAMILIES: DeviceFamily[] = FAMILY_DEFINITIONS.map(({ filePath, ...schema }) => ({
+  ...schema,
+  ...LOOKS[schema.id]!,
+  // Android STB keeps the file configured for the site (.env.pages); the others sit beside it.
+  target: schema.id === "stb" ? GITHUB_TARGET : { ...GITHUB_TARGET, filePath },
+}));
 
 /** The Node server serves one file (STB); the family switcher is for the browser-only site. */
 export const FAMILIES: DeviceFamily[] = DATA_MODE === "github-direct" ? ALL_FAMILIES : ALL_FAMILIES.slice(0, 1);
