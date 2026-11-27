@@ -1,13 +1,12 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Activity, ArrowRight, ChevronRight, Cpu, Eye, GitBranch, KeyRound, Loader2, Lock, ShieldCheck, UserCheck, UserRound, X } from "lucide-react";
+import { Activity, ArrowRight, ChevronRight, Cpu, Eye, GitBranch, KeyRound, Loader2, Lock, ShieldCheck, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Button, FieldLabel, Input, Notice } from "../components/ui/primitives";
 import { OAUTH_ENABLED, type GitHubTarget } from "../config";
 import { useTheme } from "../hooks";
 import { cn } from "../lib/cn";
 import { completeGitHubLogin, startGitHubLogin } from "../services/githubOAuth";
-import { clearStoredToken, readStoredCredentials, signInWithCredentials, type GitHubSession } from "../services/githubSession";
-import { MODERATOR_ENABLED, storeModerator, verifyModeratorKey, type ModeratorSession } from "../services/moderator";
+import { clearStoredToken, readStoredCredentials, signInWithCredentials, signInWithToken, storeToken, type GitHubSession } from "../services/githubSession";
 import { queueWelcome } from "../services/welcome";
 
 function GitHubMark({ className }: { className?: string }) {
@@ -91,33 +90,26 @@ export function SignInPage({
   target,
   onSignedIn,
   onViewOnly,
-  onModerator,
-  moderatorEnabled = MODERATOR_ENABLED,
   githubEnabled = OAUTH_ENABLED,
-  verifyKey = verifyModeratorKey,
 }: {
   target: GitHubTarget;
   onSignedIn: (session: GitHubSession) => void;
   /** Opens the read-only view for people without a GitHub account. */
   onViewOnly?: () => void;
-  /** Signs in with the shared moderator pass key (device information + Device health status). */
-  onModerator?: (session: ModeratorSession) => void;
-  moderatorEnabled?: boolean;
   githubEnabled?: boolean;
-  verifyKey?: (key: string) => Promise<void>;
 }) {
   useTheme(); // apply saved theme
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [githubBusy, setGithubBusy] = useState(false);
   const [restoring, setRestoring] = useState(true);
-  const [moderatorOpen, setModeratorOpen] = useState(false);
+  const [tokenOpen, setTokenOpen] = useState(false);
+  const [token, setToken] = useState("");
+  const [tokenBusy, setTokenBusy] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
   const [modName, setModName] = useState("");
-  const [modKey, setModKey] = useState("");
-  const [modBusy, setModBusy] = useState(false);
-  const [modError, setModError] = useState<string | null>(null);
   const started = useRef(false);
-  const modReady = modKey.trim().length > 0 && modName.trim().length >= 2;
+  const modReady = token.trim().length > 0 && modName.trim().length >= 2;
 
   // On load: finish a "Sign in with GitHub" redirect, or silently restore a saved session.
   useEffect(() => {
@@ -156,20 +148,24 @@ export function SignInPage({
     }
   };
 
-  const submitModerator = async (event: FormEvent) => {
+  /**
+   * Moderators: their name plus a GitHub token as pass key. The token talks to api.github.com only,
+   * so it works where the sign-in helper is blocked; the name is recorded on every change.
+   */
+  const submitToken = async (event: FormEvent) => {
     event.preventDefault();
-    if (!onModerator || !modReady) return;
-    setModBusy(true);
-    setModError(null);
+    if (!modReady) return;
+    setTokenBusy(true);
+    setTokenError(null);
     try {
-      await verifyKey(modKey.trim());
-      const session: ModeratorSession = { name: modName.trim(), key: modKey.trim(), remember };
-      storeModerator(session);
-      queueWelcome(session.name, "passkey");
-      onModerator(session);
+      const name = modName.trim();
+      const session = await signInWithToken(token, target);
+      storeToken(session.token, remember, name);
+      queueWelcome(name, "passkey");
+      onSignedIn({ ...session, remember, moderator: name });
     } catch (e) {
-      setModError((e as Error).message);
-      setModBusy(false);
+      setTokenError((e as Error).message);
+      setTokenBusy(false);
     }
   };
 
@@ -183,7 +179,6 @@ export function SignInPage({
     );
   }
 
-  const showModerator = Boolean(onModerator && moderatorEnabled);
   const choices = [
     {
       key: "github",
@@ -203,18 +198,18 @@ export function SignInPage({
       onClick: signInWithGitHub,
     },
     {
-      key: "moderator",
-      show: showModerator,
+      key: "token",
+      show: true,
       icon: <KeyRound className="size-6" />,
       tone: "moderator" as const,
-      tags: [<Activity key="e" className="size-4" />, <UserRound key="n" className="size-4" />],
+      tags: [<Cpu key="d" className="size-4" />, <Activity key="e" className="size-4" />],
       who: "Moderators",
       title: "Moderator pass key",
-      description: "No GitHub account needed. Edit devices and update Device health status with the pass key.",
-      action: moderatorOpen ? "Enter your details below" : "Use the pass key",
+      description: "Works on corporate laptops. Edit devices and update Device health with your pass key.",
+      action: tokenOpen ? "Enter your pass key below" : "Use the pass key",
       ariaLabel: "Sign in as moderator",
-      active: moderatorOpen,
-      onClick: () => setModeratorOpen((open) => !open),
+      active: tokenOpen,
+      onClick: () => setTokenOpen((open) => !open),
     },
     {
       key: "view",
@@ -264,46 +259,57 @@ export function SignInPage({
         </div>
 
         <AnimatePresence initial={false}>
-          {moderatorOpen && showModerator && (
+          {tokenOpen && (
             <motion.div
-              key="moderator-form"
+              key="token-form"
               initial={{ opacity: 0, height: 0, y: -8 }}
               animate={{ opacity: 1, height: "auto", y: 0 }}
               exit={{ opacity: 0, height: 0, y: -8 }}
               transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
               className="overflow-hidden"
             >
-              <form onSubmit={(e) => void submitModerator(e)} aria-label="Moderator sign-in" className="glass mt-4 grid gap-4 rounded-3xl border p-5 shadow-card">
+              <div className="glass mt-4 grid gap-4 rounded-3xl border p-5 shadow-card">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="flex items-center gap-2 font-display text-base font-bold">
-                      <UserCheck className="size-4 text-accent" aria-hidden /> Moderator sign-in
+                      <KeyRound className="size-4 text-accent" aria-hidden /> Moderator sign-in
                     </h2>
-                    <p className="mt-0.5 text-[13px] text-fg-muted">Your name is saved with every update you push, so the team can see who fixed what.</p>
+                    <p className="mt-0.5 text-[13px] text-fg-muted">
+                      Your name is saved with every change you make, so the team can see who fixed what.
+                    </p>
                   </div>
-                  <Button variant="ghost" size="icon" aria-label="Close moderator sign-in" onClick={() => setModeratorOpen(false)}>
+                  <Button variant="ghost" size="icon" aria-label="Close moderator sign-in" onClick={() => setTokenOpen(false)}>
                     <X className="size-4" />
                   </Button>
                 </div>
-                {modError && (
+                {tokenError && (
                   <Notice tone="danger" title="Could not sign in">
-                    {modError}
+                    {tokenError}
                   </Notice>
                 )}
-                <div className="grid gap-3 sm:grid-cols-[1fr_1.3fr_auto] sm:items-end">
+                <form onSubmit={(e) => void submitToken(e)} aria-label="Moderator sign-in" className="grid gap-3 sm:grid-cols-[1fr_1.3fr_auto] sm:items-end">
                   <div>
                     <FieldLabel htmlFor="moderator-name">Your name</FieldLabel>
                     <Input id="moderator-name" value={modName} maxLength={60} autoComplete="name" autoFocus onChange={(e) => setModName(e.target.value)} placeholder="e.g. Priya" />
                   </div>
                   <div>
-                    <FieldLabel htmlFor="moderator-key">Pass key</FieldLabel>
-                    <Input id="moderator-key" type="password" value={modKey} autoComplete="off" spellCheck={false} onChange={(e) => setModKey(e.target.value)} className="font-mono" />
+                    <FieldLabel htmlFor="gh-token">Pass key</FieldLabel>
+                    <Input
+                      id="gh-token"
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="github_pat_…"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      className="font-mono"
+                    />
                   </div>
-                  <Button type="submit" variant="primary" className="h-10" loading={modBusy} disabled={!modReady} icon={<ArrowRight className="size-4" />}>
+                  <Button type="submit" variant="primary" className="h-10" loading={tokenBusy} disabled={!modReady} icon={<ArrowRight className="size-4" />}>
                     Continue
                   </Button>
-                </div>
-              </form>
+                </form>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

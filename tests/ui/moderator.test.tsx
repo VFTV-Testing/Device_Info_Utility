@@ -12,9 +12,9 @@ import { DeviceDataProvider, useDeviceData } from "../../src/context/DeviceDataC
 import { EnvironmentProvider } from "../../src/context/EnvironmentContext";
 import { ModeratorContext } from "../../src/context/ModeratorContext";
 import { SignInPage } from "../../src/pages/SignInPage";
-import { ApiError, type Api } from "../../src/services/api";
+import type { Api } from "../../src/services/api";
 import type { EnvApi } from "../../src/services/environmentClient";
-import { createModeratorDeviceClient, createModeratorEnvClient, readModerator } from "../../src/services/moderator";
+import { createModeratorDeviceClient, createModeratorEnvClient } from "../../src/services/moderator";
 
 const TARGET = { owner: "VFTV-Testing", repo: "Configs", branch: "Main", filePath: "AVSB_GEN3_Configs/deviceInformation.json" };
 const rec: DeviceRecord = { sprintNo: "67.00+1", Cver: "0.67.00", firmwareVersion: "1", appVersion: "0.67.00", Hardware: "GEN3", Country: "GR_MCAST" };
@@ -26,45 +26,54 @@ afterEach(() => {
 });
 
 describe("Moderator sign-in", () => {
-  it("checks the key, then signs in with the given name", async () => {
-    const onModerator = vi.fn();
-    const verifyKey = vi.fn(async () => undefined);
-    render(<SignInPage target={TARGET} onSignedIn={vi.fn()} onModerator={onModerator} moderatorEnabled verifyKey={verifyKey} />);
-    const user = userEvent.setup();
-    expect(screen.queryByLabelText("Pass key")).not.toBeInTheDocument(); // form opens from the card
-    await user.click(await screen.findByRole("button", { name: "Sign in as moderator" }));
-    const form = await screen.findByRole("form", { name: "Moderator sign-in" });
-    const go = within(form).getByRole("button", { name: /Continue/ });
-    expect(go).toBeDisabled();
-    await user.type(within(form).getByLabelText("Your name"), "Priya");
-    await user.type(within(form).getByLabelText("Pass key"), "amber-falcon-7Q4K");
-    await user.click(go);
-    await waitFor(() => expect(onModerator).toHaveBeenCalledWith({ name: "Priya", key: "amber-falcon-7Q4K", remember: false }));
-    expect(verifyKey).toHaveBeenCalledWith("amber-falcon-7Q4K");
-    expect(readModerator()).toMatchObject({ name: "Priya" }); // kept for this tab
-  });
-
-  it("shows why a wrong key is refused", async () => {
-    const onModerator = vi.fn();
-    const verifyKey = vi.fn(async () => {
-      throw new ApiError(401, "INVALID_KEY", "That moderator key is not valid.");
-    });
-    render(<SignInPage target={TARGET} onSignedIn={vi.fn()} onModerator={onModerator} moderatorEnabled verifyKey={verifyKey} />);
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Sign in as moderator" }));
-    await user.type(await screen.findByLabelText("Your name"), "Priya");
-    await user.type(screen.getByLabelText("Pass key"), "wrong");
-    await user.click(screen.getByRole("button", { name: /^Continue/ }));
-    expect(await screen.findByText("That moderator key is not valid.")).toBeInTheDocument();
-    expect(onModerator).not.toHaveBeenCalled();
-  });
-
-  it("offers GitHub, moderator and view-only cards, without a personal access token option", async () => {
-    render(<SignInPage target={TARGET} onSignedIn={vi.fn()} onViewOnly={vi.fn()} onModerator={vi.fn()} moderatorEnabled githubEnabled />);
+  it("offers GitHub, moderator and view-only cards", async () => {
+    render(<SignInPage target={TARGET} onSignedIn={vi.fn()} onViewOnly={vi.fn()} githubEnabled />);
     expect(await screen.findByRole("button", { name: "Sign in with GitHub" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Sign in as moderator" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View without signing in" })).toBeInTheDocument();
-    expect(screen.queryByText(/access token/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Pass key")).not.toBeInTheDocument(); // form opens from the card
+  });
+
+  it("signs a moderator in with their name and a GitHub token as pass key, talking only to GitHub", async () => {
+    const onSignedIn = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/user")) return new Response(JSON.stringify({ login: "priya", name: "Priya" }), { status: 200 });
+      return new Response(JSON.stringify({ permissions: { push: true } }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      render(<SignInPage target={TARGET} onSignedIn={onSignedIn} githubEnabled />);
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: "Sign in as moderator" }));
+      const form = await screen.findByRole("form", { name: "Moderator sign-in" });
+      const go = within(form).getByRole("button", { name: /Continue/ });
+      expect(go).toBeDisabled();
+      await user.type(within(form).getByLabelText("Pass key"), "github_pat_abc");
+      expect(go).toBeDisabled(); // the name is required too
+      await user.type(within(form).getByLabelText("Your name"), "Ravi");
+      await user.click(go);
+      await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith(expect.objectContaining({ login: "priya", moderator: "Ravi", token: "github_pat_abc", canWrite: true })));
+      const hosts = fetchMock.mock.calls.map(([u]) => new URL(String(u)).host);
+      expect(new Set(hosts)).toEqual(new Set(["api.github.com"]));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("shows why GitHub refused the pass key", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 401 })));
+    try {
+      render(<SignInPage target={TARGET} onSignedIn={vi.fn()} githubEnabled />);
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: "Sign in as moderator" }));
+      await user.type(await screen.findByLabelText("Your name"), "Ravi");
+      await user.type(screen.getByLabelText("Pass key"), "wrong");
+      await user.click(screen.getByRole("button", { name: /^Continue/ }));
+      expect(await screen.findByText(/GitHub rejected this token/)).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

@@ -215,6 +215,14 @@ export function AppShell() {
                 Sign in to edit
               </Button>
             )}
+            {auth?.session.moderator && (
+              <span
+                className="inline-flex h-7 items-center gap-1.5 rounded-full bg-accent-soft px-2.5 text-xs font-semibold text-accent"
+                title={`Moderator pass key (GitHub: ${auth.session.login})`}
+              >
+                <UserRound className="size-3.5" aria-hidden /> Moderator · {auth.session.moderator}
+              </span>
+            )}
             {moderator && (
               <>
                 <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-accent-soft px-2.5 text-xs font-semibold text-accent" title="Signed in with the moderator key">

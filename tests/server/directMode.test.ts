@@ -59,6 +59,15 @@ describe("direct client", () => {
     expect(gh.text!.endsWith("}\r\n\r\n")).toBe(true);
   });
 
+  it("records the moderator's typed name on commits made with their pass key", async () => {
+    const gh = fake();
+    const session = { ...(await signInWithToken("t", target, gh.fetch)), moderator: "Ravi" };
+    const client = createDirectClient(target, session, gh.fetch);
+    expect(await client.getConfig()).toMatchObject({ user: "tester", moderator: "Ravi" });
+    await client.updateRecord(KEY, original, edited);
+    expect(gh.commits[0]!.message).toContain("Requested by: Ravi (moderator)");
+  });
+
   it("surfaces record conflicts as ApiError RECORD_CONFLICT", async () => {
     const gh = fake();
     const client = createDirectClient(target, await signInWithToken("t", target, gh.fetch), gh.fetch);

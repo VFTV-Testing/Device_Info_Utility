@@ -24,6 +24,8 @@ export interface GitHubSession {
   refreshToken?: string;
   expiresAt?: number;
   remember?: boolean;
+  /** Set when signed in on the Moderator card: the name typed there, recorded on every change. */
+  moderator?: string;
 }
 
 const TOKEN_KEY = "dim-github-token";
@@ -44,7 +46,7 @@ function storages(): Storage[] {
 }
 
 /** Stored credentials. Kept for this tab only unless the user ticks "Remember me on this device". */
-export type StoredCredentials = TokenSet & { remember: boolean };
+export type StoredCredentials = TokenSet & { remember: boolean; moderator?: string };
 
 export function storeCredentials(credentials: StoredCredentials): void {
   clearStoredToken();
@@ -56,8 +58,8 @@ export function storeCredentials(credentials: StoredCredentials): void {
 }
 
 /** Personal-access-token sign-in (no expiry, no refresh). */
-export function storeToken(token: string, remember: boolean): void {
-  storeCredentials({ accessToken: token, remember });
+export function storeToken(token: string, remember: boolean, moderator?: string): void {
+  storeCredentials({ accessToken: token, remember, moderator });
 }
 
 export function readStoredCredentials(): StoredCredentials | null {
@@ -95,7 +97,7 @@ export async function ensureFreshSession(session: GitHubSession, refresh = refre
   session.token = tokens.accessToken;
   session.refreshToken = tokens.refreshToken ?? session.refreshToken;
   session.expiresAt = tokens.expiresAt;
-  storeCredentials({ ...tokens, refreshToken: session.refreshToken, remember: Boolean(session.remember) });
+  storeCredentials({ ...tokens, refreshToken: session.refreshToken, remember: Boolean(session.remember), moderator: session.moderator });
   return session;
 }
 
@@ -106,9 +108,14 @@ export async function signInWithCredentials(credentials: StoredCredentials, targ
     current = { ...(await refreshGitHubToken(current.refreshToken)), remember: credentials.remember } as StoredCredentials;
   }
   const session = await signInWithToken(current.accessToken, target, fetchFn);
-  const full: GitHubSession = { ...session, refreshToken: current.refreshToken, expiresAt: current.expiresAt, remember: credentials.remember };
-  storeCredentials({ accessToken: full.token, refreshToken: full.refreshToken, expiresAt: full.expiresAt, remember: credentials.remember });
+  const full: GitHubSession = { ...session, refreshToken: current.refreshToken, expiresAt: current.expiresAt, remember: credentials.remember, moderator: credentials.moderator };
+  storeCredentials({ accessToken: full.token, refreshToken: full.refreshToken, expiresAt: full.expiresAt, remember: credentials.remember, moderator: full.moderator });
   return full;
+}
+
+/** "Priya (moderator)" for moderator sign-ins; undefined for team members. */
+export function moderatorActor(session: GitHubSession): string | undefined {
+  return session.moderator ? `${session.moderator} (moderator)` : undefined;
 }
 
 export class SignInError extends Error {}
@@ -165,6 +172,7 @@ export function createDirectClient(target: GitHubTarget, session: GitHubSession,
     readOnly: !session.canWrite,
   });
   const service = new DeviceService(store);
+  const actor = moderatorActor(session);
   const run = async <T,>(work: () => Promise<T>): Promise<T> => {
     try {
       return await work();
@@ -181,13 +189,14 @@ export function createDirectClient(target: GitHubTarget, session: GitHubSession,
       authEnabled: true,
       readOnly: store.readOnly,
       user: session.login,
+      moderator: session.moderator,
     }),
     getDevices: () => run(() => service.getSnapshot()),
     initialize: () => run(() => service.initialize()),
-    // Commits are authored by the signed-in user, so no "Requested by" line is needed.
-    createRecord: (key, values) => run(() => service.createRecord(key, values)),
-    updateRecord: (key, base, values) => run(() => service.updateRecord(key, base, values)),
-    deleteRecord: (key, base) => run(() => service.deleteRecord(key, base)),
-    importRecords: (mode, mutations) => run(() => service.importRecords(mode, mutations)),
+    // Team commits are authored by the signed-in user. Moderator commits add "Requested by: <name> (moderator)".
+    createRecord: (key, values) => run(() => service.createRecord(key, values, actor)),
+    updateRecord: (key, base, values) => run(() => service.updateRecord(key, base, values, actor)),
+    deleteRecord: (key, base) => run(() => service.deleteRecord(key, base, actor)),
+    importRecords: (mode, mutations) => run(() => service.importRecords(mode, mutations, actor)),
   };
 }

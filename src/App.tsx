@@ -149,7 +149,7 @@ function DirectApp() {
     );
   }
   if (!session || !client || !envClient) {
-    return <SignInPage target={GITHUB_TARGET} onSignedIn={setSession} onViewOnly={enterViewOnly} onModerator={setModerator} />;
+    return <SignInPage target={GITHUB_TARGET} onSignedIn={setSession} onViewOnly={enterViewOnly} />;
   }
   return (
     <FamilyContext.Provider value={familyValue}>

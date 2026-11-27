@@ -3,7 +3,7 @@ import { AppError } from "../../shared/errors";
 import { GitHubFileStore } from "../../shared/githubStore";
 import { GITHUB_API_URL, type GitHubTarget } from "../config";
 import { ApiError, request } from "./api";
-import { ensureFreshSession, type GitHubSession } from "./githubSession";
+import { ensureFreshSession, moderatorActor, type GitHubSession } from "./githubSession";
 import { PublicRawFileStore } from "./viewerClient";
 
 /** What the Environment tab needs: load the file and append an update. */
@@ -85,8 +85,8 @@ export function createDirectEnvClient(target: GitHubTarget, session: GitHubSessi
         const s = await getService();
         return { ...(await s.getSnapshot()), readOnly: s.readOnly, location: s.location };
       }),
-    // Commits are authored by the signed-in user; the login is also recorded on the entry.
-    addEntries: (inputs) => wrap(async () => (await getService()).addEntries(inputs, session.login)),
+    // Commits are authored by the signed-in user; the entry records the login, or the moderator's name.
+    addEntries: (inputs) => wrap(async () => (await getService()).addEntries(inputs, moderatorActor(session) ?? session.login)),
   };
 }
 
