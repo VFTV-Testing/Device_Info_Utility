@@ -1,6 +1,16 @@
 {
   "version": 1,
   "ports": {
+    "TES7-GER": {
+      "STB1": [
+        {
+          "at": "2026-11-27T11:39:17.187Z",
+          "by": "Ganesh (moderator)",
+          "status": "ok",
+          "note": "da"
+        }
+      ]
+    },
     "X102-GER": {
       "PORT2": [
         {
